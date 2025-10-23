@@ -1,0 +1,70 @@
+@startuml
+/'
+@id: framework-development-environment-setup
+@title: Development Environment Setup - Developer Onboarding
+@description: Sequence diagram showing the complete developer onboarding workflow from repository clone through virtual environment setup and CLI verification
+@keywords: [diagram, sequence, development, setup, onboarding, installation, venv, framework-contributor, maintainer]
+@relevance: Use this diagram to understand the development environment setup process including editable installation, CLI verification, and template development workflow
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Development Environment Setup - Developer Onboarding
+
+note right : Developer onboarding sequence for Pantheon Framework:\n• Clone → venv → install → verify workflow\n• Development vs production installation modes\n• CLI verification ensures E2E tests will work
+
+participant "Developer" as Dev
+participant "Git Repository" as Git
+participant "Virtual Environment" as VEnv
+participant "Package Installation" as Install
+participant "CLI Verification" as CLI
+participant "Framework" as Framework
+
+== Repository Setup ==
+Dev -> Git : git clone <repository-url>
+Dev -> Git : cd pantheon-framework
+note over Git : Framework source code:\n• Core framework in pantheon/\n• Tests in tests/\n• Production team templates in pantheon/_templates/
+
+== Virtual Environment Creation ==
+Dev -> VEnv : python -m venv .venv
+note over VEnv : Isolated Python environment:\n• Python 3.11 or higher required\n• Prevents system package conflicts\n• Clean dependency management
+
+Dev -> VEnv : source .venv/bin/activate
+note right of VEnv : Windows: .venv\Scripts\activate\nLinux/Mac: source .venv/bin/activate
+
+== Development Installation ==
+Dev -> Install : pip install -e ".[dev,test]"
+note over Install : Editable installation with extras:\n• -e flag: changes reflected immediately\n• [dev]: development dependencies (ruff, mypy)\n• [test]: testing dependencies (pytest, coverage)
+
+Install -> Framework : Install in development mode
+note over Framework : Development installation benefits:\n• Source changes reflected immediately\n• No need to reinstall after code changes\n• CLI becomes available in PATH
+
+== CLI Verification ==
+Install -> CLI : pantheon --help
+CLI -> Dev : CLI available confirmation
+note right of CLI : Critical for E2E tests:\n• Verifies installation worked\n• CLI must be in PATH\n• E2E tests call 'pantheon' via subprocess
+
+Dev -> CLI : pantheon init
+note over CLI : Test basic functionality:\n• Should create .pantheon_project\n• Should create pantheon-teams/ directory\n• Validates template bundling works
+
+== Development vs Production Installation ==
+
+note over Install : **Development Mode (pip install -e .)**:\n• Source changes reflected immediately\n• Template changes require pantheon init\n• Full development dependencies
+
+note over Install : **Production Mode (pip install .)**:\n• Creates wheel and installs\n• Used for testing final package\n• Clean environment validation
+
+== Template Development Notes ==
+note over Dev : Template changes in pantheon/_templates/:\n• Require re-running 'pantheon init'\n• Only picked up during initialization\n• Existing projects not auto-updated
+
+note over Dev : Test fixture changes in tests/fixtures/:\n• Picked up automatically by E2E tests\n• No need to re-initialize\n• Completely isolated from production
+
+== Verification Checklist ==
+Dev -> Dev : Verify installation success
+note over Dev : ✅ Virtual environment activated\n✅ pantheon --help works\n✅ pantheon init creates project structure\n✅ pytest tests/unit/ runs (no installation needed)\n✅ pytest tests/e2e/ runs (needs installation)
+
+== Ready for Development ==
+Dev -> Dev : Development environment ready
+note over Dev : Can now:\n• Run all test categories\n• Make code changes (reflected immediately)\n• Develop new features\n• Contribute to framework
+
+note right : Next: See ../testing/test-execution-flow.puml for testing workflow\nSee ./template-change-propagation.puml for template development
+@enduml

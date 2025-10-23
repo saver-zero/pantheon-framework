@@ -1,0 +1,111 @@
+@startuml
+/'
+@id: process-model-operation-detection
+@title: Operation Detection and Schema Validation
+@description: ProcessHandler orchestration for operation type detection using efficient 2-call pattern and schema compilation.
+@keywords: [diagram, sequence, process-model, operation-detection, CREATE, UPDATE, RETRIEVE, schema-validation, ProcessHandler]
+@relevance: Use this diagram to understand how ProcessHandler determines process types (CREATE/UPDATE/RETRIEVE) through efficient 2-call detection and validates inputs against compiled schemas.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Operation Detection & Schema Validation
+
+note right over
+This diagram shows ProcessHandler orchestration:
+    * Input validation and redirect checking
+    * Enhanced parameters building with built-in variables
+    * Efficient 2-call operation type detection
+    * Schema compilation and validation
+
+Previous: See command-processing.puml for command processing
+Next: See ../04-processes/get-process-core.puml for RETRIEVE execution
+end note
+
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "Artifact Engine\n(Service Layer - Utilities)" as ArtifactEngine
+participant "FileSystem\n(I/O Adapter)" as FS
+
+Handler -> Handler : execute(process_input)
+activate Handler
+
+== Input Validation ==
+
+Handler -> Handler : validate_input(process_name, input_data)
+note right over
+Validates ProcessInput structure
+and required parameters
+end note
+
+== Redirect Check Phase ==
+
+Handler -> Workspace : has_process_redirect("get-ticket")
+activate Workspace
+Workspace -> FS : exists(pantheon-teams/<active_team>/processes/get-ticket/redirect.md)
+FS --> Workspace : false
+Workspace --> Handler : false (no redirect)
+deactivate Workspace
+
+== Enhanced Parameters Building Phase ==
+
+Handler -> Handler : _build_enhanced_parameters(input_data)
+note right over
+Adds built-in variables:
+* pantheon_actor
+* pantheon_timestamp,
+* pantheon_datestamp
+* pantheon_process
+end note
+
+== Operation Type Detection Phase ==
+
+note over Handler : ProcessHandler uses determine_process_type():\n1. Try get_artifact_content_template() for content.md\n2. If not found, try get_artifact_patch_template() for patch.md\n3. Based on results, determine operation type
+
+Handler -> Handler : determine_process_type("get-ticket")
+activate Handler
+Handler -> Workspace : get_artifact_content_template("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/content.md)
+activate FS
+FS --> Workspace : FileNotFoundError (no content.md)
+deactivate FS
+Workspace --> Handler : FileNotFoundError
+deactivate Workspace
+
+Handler -> Workspace : get_artifact_patch_template("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/patch.md)
+activate FS
+FS --> Workspace : FileNotFoundError (no patch.md)
+deactivate FS
+Workspace --> Handler : FileNotFoundError
+deactivate Workspace
+
+Handler -> Handler : Operation Detection Logic:\n- No content.md ✗\n- No patch.md ✗\n→ ProcessType.RETRIEVE
+deactivate Handler
+
+note over Handler : RETRIEVE operation detected:\nNeeds locator + parser + sections for artifact finding
+
+== Schema Validation Phase ==
+
+Handler -> Workspace : get_process_schema("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/schema.jsonnet)
+FS --> Workspace : Schema content
+Workspace --> Handler : Schema content
+deactivate Workspace
+
+Handler -> ArtifactEngine : compile_schema(schema_content, profile_content)
+activate ArtifactEngine
+ArtifactEngine --> Handler : Composed JSON Schema
+deactivate ArtifactEngine
+
+Handler -> ArtifactEngine : validate(input_data, schema)
+activate ArtifactEngine
+ArtifactEngine --> Handler : Validation success
+deactivate ArtifactEngine
+
+note over Handler : Ready to execute RETRIEVE process:\nexecute_get_process(enhanced_parameters)
+
+@enduml

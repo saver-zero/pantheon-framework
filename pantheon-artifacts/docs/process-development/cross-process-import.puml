@@ -1,0 +1,141 @@
+@startuml
+/'
+@id: process-development-cross-process-import
+@title: Cross-Process Import Sequence (Preprocessed)
+@description: Sequence diagram showing how schemas can extend other process schemas via process-schema:// semantic URIs with support for sub-path section imports
+@keywords: [diagram, sequence, cross-process, import, schema, semantic-uri, extension]
+@relevance: Use this diagram to understand cross-process schema extension via process-schema:// URIs including both full schema and sub-path section imports
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Cross-Process Import Sequence (Preprocessed)
+
+actor "AI Agent" as Agent
+participant "CLI" as CLI
+participant "Artifact Engine" as AE
+participant "Jsonnet Compiler" as JC
+participant "Pantheon Workspace" as PW
+participant "File System" as FS
+
+note over Agent, FS
+    AI Agent executes: pantheon get schema update-plan --actor <agent-name>
+    The update-plan schema extends create-ticket schema via import
+    Supports both process-level and sub-path imports:
+    • import "process-schema://create-ticket" (full schema)
+    • import "process-schema://update-guide/sections/core-principles" (section)
+    (Workspace preprocesses all imports before compilation)
+end note
+
+note over PW, FS
+    Pantheon Workspace -> FileSystem is a full qualified absolute path using pathlib.path
+    including <project_root>/pantheon-teams/<active-team>/ prefixed
+    (not shown in diagram)
+end note
+
+Agent -> CLI: pantheon get schema update-plan --actor <agent-name>
+activate CLI
+
+CLI -> CLI: validate_actor() and check_permissions()
+
+CLI -> PW: get_team_profile()
+activate PW
+PW -> FS: read_text("/team-profile.yaml")
+activate FS
+FS --> PW: profile YAML content
+deactivate FS
+PW --> CLI: profile content
+deactivate PW
+
+CLI -> CLI: yaml.safe_load(profile_content)
+
+CLI -> PW: get_process_schema("update-plan")
+activate PW
+
+PW -> FS: read_text("/processes/update-plan/schema.jsonnet")
+activate FS
+FS --> PW: 'local baseTicketSchema = import "process-schema://create-ticket";\n...'
+deactivate FS
+
+note over PW
+    Workspace preprocessing:
+    1. Parse content line by line
+    2. Find import statements (supports local var = import "...")
+    3. Detect semantic URIs (process-schema://...)
+    4. Parse sub-paths if present (e.g., /sections/core-principles)
+    5. Route to appropriate resolver method
+    6. Replace import with resolved content inline
+    7. Handle nested/recursive imports
+end note
+
+PW -> PW: _preprocess_content(raw_content, file_path, import_stack)
+
+PW -> PW: get_resolved_content("process-schema://create-ticket")
+
+note over PW
+    get_resolved_content() uses _parse_semantic_uri()
+    to extract scheme, process_name, and optional sub_path
+    Routes based on URI structure:
+    • process-schema://name → get_process_schema(name)
+    • process-schema://name/sections/x → get_section_schema(name, "sections/x")
+    Each method reads and preprocesses the target content
+end note
+
+PW -> FS: read_text("/processes/create-ticket/schema.jsonnet")
+activate FS
+FS --> PW: base schema content
+deactivate FS
+
+PW -> PW: _preprocess_content(base_content, base_file_path, import_stack)
+
+note over PW
+    Preprocessing complete:
+    Import statement directly replaced with processed content
+    Returns single preprocessed content string
+end note
+
+PW --> CLI: preprocessed schema content (all imports resolved)
+deactivate PW
+
+CLI -> AE: compile_schema(preprocessed_content, active_profile_config, process_name)
+activate AE
+
+note over AE
+    Compile preprocessed Jsonnet with profile context
+    Standard Jsonnet compilation - no import callbacks needed
+    All imports already resolved by Workspace preprocessing
+end note
+
+AE -> JC: _compile_jsonnet(preprocessed_content, ext_vars)
+activate JC
+
+note right of JC
+    Jsonnet compiles with:
+    1. Single preprocessed content string
+    2. All imports already inlined
+    3. Profile config as ext_vars
+
+    No import resolution at compile time
+end note
+
+JC --> AE: compiled final schema (JSON)
+deactivate JC
+
+AE -> AE: _sanitize_schema_structure()
+
+AE --> CLI: compiled schema dict
+deactivate AE
+
+CLI -> CLI: json.dumps(compiled_schema, indent=2)
+
+CLI --> Agent: final composed schema (JSON string)
+deactivate CLI
+
+note over Agent
+    AI Agent receives complete schema
+    combining create-ticket base
+    with update-plan extensions
+    Resolved via direct content inlining in _preprocess_content()
+end note
+
+@enduml

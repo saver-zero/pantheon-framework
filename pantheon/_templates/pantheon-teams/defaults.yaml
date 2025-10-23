@@ -1,0 +1,5 @@
+# Framework-level defaults for team initialization
+# This configuration is used by the 'pantheon init' command to determine
+# the default team when multiple teams are available.
+
+default_team: pantheon-dev

@@ -1,0 +1,108 @@
+@startuml
+/'
+@id: process-model-get-sections-metadata
+@title: Get Sections Metadata Flow
+@description: Pantheon get sections command flow supporting both UPDATE target.jsonnet and RETRIEVE sections.jsonnet with permission filtering.
+@keywords: [diagram, sequence, process-model, sections-metadata, target-jsonnet, sections-jsonnet, permissions, CLI-command]
+@relevance: Use this diagram to understand how pantheon get sections extracts section metadata with names and descriptions, falling back from target.jsonnet to sections.jsonnet, with actor-based permission filtering.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Get Sections Metadata Flow
+
+note right : This diagram shows the 'pantheon get sections' command flow:\n• Supports both UPDATE (target.jsonnet) and RETRIEVE/GET (sections.jsonnet)\n• Falls back from target.jsonnet to sections.jsonnet\n• Extracts section metadata with names and descriptions\n• Filters sections based on actor permissions\n\nFor related flows: See get-process-core.puml and update-process.puml
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Command Invocation ==
+
+Agent -> CLI : pantheon get sections update-plan --actor tech-lead
+activate CLI
+
+CLI -> CLI : Parse arguments:\n• process_name = "update-plan"\n• actor = "tech-lead"
+
+CLI -> CLI : validate_actor("tech-lead")
+
+note over CLI : Validation ensures actor corresponds\nto existing agent in pantheon-teams/<team>/agents/
+
+== Section Metadata Retrieval ==
+
+CLI -> Handler : get_sections_metadata("update-plan")
+activate Handler
+
+note over Handler : Try target.jsonnet first (UPDATE processes),\nthen fall back to sections.jsonnet (RETRIEVE/GET)
+
+Handler -> Workspace : get_artifact_target_section("update-plan")
+activate Workspace
+
+Workspace -> Workspace : _build_process_path("update-plan", "artifact", "target.jsonnet")
+
+note over Workspace : Path: pantheon-teams/<active_team>/processes/update-plan/artifact/target.jsonnet
+
+Workspace -> FS : read_text(path)
+activate FS
+FS --> Workspace : File content (Jsonnet)
+deactivate FS
+
+Workspace -> Workspace : _preprocess_content(content, path)\n(resolve imports)
+
+Workspace --> Handler : Preprocessed target.jsonnet content
+deactivate Workspace
+
+note over Handler : If target.jsonnet not found,\nfall back to sections.jsonnet
+
+Handler -> Handler : Parse JSON configuration
+
+Handler -> Handler : Extract sections object:\n{\n  "sections": {\n    "context": {"description": "..."},\n    "plan": {"description": "..."},\n    "status": {"description": "..."}\n  }\n}
+
+Handler -> Handler : Build metadata list:\n[\n  {"name": "context", "description": "..."},\n  {"name": "plan", "description": "..."},\n  {"name": "status", "description": "..."}\n]
+
+Handler --> CLI : Return section metadata list
+deactivate Handler
+
+== Permission Filtering ==
+
+CLI -> CLI : _get_permitted_sections("update-plan", "tech-lead", sections_data)
+
+note over CLI : Filter sections based on permissions.jsonnet:\n• Allow list takes precedence\n• Wildcard "*" grants all access\n• Deny overrides allow
+
+CLI -> CLI : Filter sections:\nPermitted: ["context", "plan", "status"]
+
+== Response Formatting ==
+
+CLI -> CLI : Format as JSON:\n[\n  {"name": "context", "description": "Ticket background"},\n  {"name": "plan", "description": "Implementation plan"},\n  {"name": "status", "description": "Current progress"}\n]
+
+CLI --> Agent : Return JSON to stdout
+deactivate CLI
+
+== Alternative Flow: RETRIEVE/GET Process ==
+
+note over Handler : If process is a GET operation (e.g., get-ticket):\n1. get_artifact_target_section() raises FileNotFoundError\n2. Fall back to get_artifact_section_markers()\n3. Parse sections.jsonnet instead\n4. Same structure, same metadata extraction
+
+Handler -> Workspace : get_artifact_section_markers("get-ticket")
+activate Workspace
+
+Workspace -> Workspace : _build_process_path("get-ticket", "artifact", "sections.jsonnet")
+
+note over Workspace : Path: pantheon-teams/<active_team>/processes/get-ticket/artifact/sections.jsonnet
+
+Workspace -> FS : read_text(path)
+activate FS
+FS --> Workspace : File content (Jsonnet)
+deactivate FS
+
+Workspace --> Handler : Preprocessed sections.jsonnet content
+deactivate Workspace
+
+note over Handler : Both target.jsonnet and sections.jsonnet\nhave identical "sections" structure
+
+== Error Handling ==
+
+note over Handler : Error cases:\n1. Neither target.jsonnet nor sections.jsonnet exists\n   → ValueError: "Process does not define section metadata"\n2. JSON parsing fails\n   → ValueError: "Failed to parse {file}"\n3. Missing "sections" object\n   → ValueError: "Does not define any sections"
+
+@enduml

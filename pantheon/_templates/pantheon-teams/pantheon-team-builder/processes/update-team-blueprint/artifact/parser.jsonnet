@@ -1,0 +1,1 @@
+import "artifact-parser://get-team-blueprint"

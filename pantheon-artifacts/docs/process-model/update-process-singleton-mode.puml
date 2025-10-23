@@ -1,0 +1,152 @@
+@startuml
+/'
+@id: process-model-update-process-singleton-mode
+@title: UPDATE Process Singleton Mode Detection
+@description: Technical details of singleton vs multi-artifact mode detection in UPDATE processes using parser.jsonnet presence and internal ArtifactEngine logic.
+@keywords: [diagram, sequence, process-model, UPDATE, singleton-mode, multi-artifact-mode, parser-jsonnet, mode-detection, artifact-finding]
+@relevance: Use this diagram to understand how parser.jsonnet presence determines UPDATE mode (singleton vs multi-artifact), artifact_id handling differences, and mode-specific error messages.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title UPDATE Process - Singleton Mode Detection
+
+note right over
+This diagram shows the technical details of singleton vs multi-artifact mode detection:
+    * How parser.jsonnet presence determines mode
+    * Internal ArtifactEngine mode detection logic
+    * Differences in artifact_id handling
+    * Error message variations by mode
+
+Context: See update-process-core.puml for main UPDATE flow
+Related: See get-process-core.puml for GET singleton mode (same pattern)
+end note
+
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Artifact Engine\n(Service Layer - Pure Computation)" as Artifact
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Mode Detection Entry Point ==
+
+note over Handler : ProcessHandler calls find_artifact()\nwith artifact_id parameter.\n\nThe artifact_id may be:\n• Provided by user (--id flag)\n• None (for singleton processes)
+
+Handler -> Artifact : find_artifact("update-artifact", artifact_id)
+activate Artifact
+
+note over Artifact : ArtifactEngine handles mode detection\ninternally without pre-loading assets.\n\nMatches GET process pattern for consistency.
+
+== Internal Mode Detection ==
+
+Artifact -> Artifact : has_artifact_parser("update-artifact")
+activate Artifact
+
+note over Artifact : Check if parser.jsonnet exists\nto determine artifact mode
+
+Artifact -> Workspace : get_artifact_parser("update-artifact")
+activate Workspace
+
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/update-artifact/artifact/parser.jsonnet)
+activate FS
+
+alt parser.jsonnet exists (multi-artifact mode)
+    FS --> Workspace : Parser rules content
+    deactivate FS
+    Workspace --> Artifact : Parser rules
+    deactivate Workspace
+
+    note over Artifact : Multi-artifact mode detected:\n• parser.jsonnet exists\n• artifact_id REQUIRED\n• Multiple artifacts managed
+
+    Artifact --> Artifact : Return True (has parser)
+    deactivate Artifact
+
+    note over Artifact : Proceed with multi-artifact logic:\n1. Normalize artifact_id using parser\n2. Use locator to find artifact\n3. Return artifact path
+
+    alt artifact_id is None
+        Artifact --> Handler : Error: "artifact_id required for multi-artifact process"
+    else artifact_id provided
+        Artifact -> Artifact : _normalize_id("update-artifact", artifact_id)
+        note right : Apply parser transformations:\n• Strip whitespace\n• Extract basename\n• Normalize format
+
+        Artifact -> Artifact : _locate_artifact("update-artifact", normalized_id)
+        note right : Use locator.jsonnet pattern:\n• Extract directory\n• Apply regex pattern\n• Search for matching file
+
+        Artifact --> Handler : artifact_path or None
+    end
+
+else parser.jsonnet missing (singleton mode)
+    FS --> Workspace : FileNotFoundError
+    deactivate FS
+    Workspace --> Artifact : FileNotFoundError
+    deactivate Workspace
+
+    note over Artifact : Singleton mode detected:\n• No parser.jsonnet\n• artifact_id NOT needed\n• Single artifact managed
+
+    Artifact --> Artifact : Return False (no parser)
+    deactivate Artifact
+
+    note over Artifact : Proceed with singleton logic:\n1. Skip ID normalization (no parser)\n2. Use locator directly to find singleton\n3. Ignore artifact_id parameter
+
+    Artifact -> Artifact : _locate_artifact("update-artifact", None)
+    note right : Use locator.jsonnet pattern:\n• Directory specified\n• Pattern matches singleton\n• Should find exactly one file
+
+    alt singleton artifact found
+        Artifact --> Handler : artifact_path
+        note over Handler : Success:\nFound singleton artifact
+    else singleton artifact not found
+        Artifact --> Handler : None
+        note over Handler : Error:\n"Artifact not found for singleton process"
+    end
+end
+
+deactivate Artifact
+
+== Error Handling by Mode ==
+
+note over Handler
+Error messages differ by mode:
+
+Multi-artifact mode (with parser.jsonnet):
+• "Artifact not found: {artifact_id}"
+• "artifact_id required for multi-artifact process"
+• Specific to the requested ID
+
+Singleton mode (no parser.jsonnet):
+• "Artifact not found for singleton process"
+• No ID mentioned (not relevant)
+• Generic singleton message
+
+This maintains consistency with GET process behavior.
+end note
+
+note right of Handler
+Key Implementation Details:
+
+1. Mode Detection:
+   • Automatic based on parser.jsonnet presence
+   • No configuration needed
+   • Matches GET process pattern
+
+2. ArtifactEngine Responsibility:
+   • Loads locator/parser internally
+   • No pre-loading by ProcessHandler
+   • Encapsulated mode logic
+
+3. Consistency:
+   • UPDATE matches GET behavior exactly
+   • Same error messages
+   • Same mode detection logic
+
+4. Benefits:
+   • Simple ProcessHandler code
+   • No complex validation logic
+   • Mode-appropriate error messages
+   • DRY principle (reuses GET pattern)
+
+Related Diagrams:
+* update-process-core.puml: Main UPDATE execution flow
+* get-process-core.puml: GET singleton mode (same pattern)
+* ../01-architecture/container-view.puml: Architectural patterns
+end note
+
+@enduml

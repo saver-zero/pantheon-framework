@@ -1,0 +1,113 @@
+# Profile Properties Documentation:
+#
+# enforce_tdd:
+#   Description: When true, requires technical plans to include a dedicated testing phase as the first implementation step, mechanically enforcing Test-Driven Development practices.
+#
+# run_and_fix_tests:
+#   Description: When true, requires running tests and fixing failures as part of the implementation workflow.
+#
+# perform_code_review:
+#   Description: When true, stores the baseline commit info for code review later.
+#
+# draft_commit_message:
+#   Description: When true, requires each implementation phase to include commit message drafting using Pantheon tools for proper formatting, that can be copy-pasted manually or auto-commited.
+#
+# auto_commit_each_phase:
+#   Description: When true, automatically commits code after each implementation phase. When false, requires manual operator to commit.
+#
+# enable_progress_log:
+#   Description: When true, requires each implementation phase to include progress logging for transparent tracking of development decisions.
+#
+# read_documentation:
+#   Description: When true, technical plans must include reading existing documentation to establish architectural context before implementation.
+#
+# update_documentation:
+#   Description: When true, requires technical plans to include documentation update phases specifying affected files and change summaries to prevent documentation drift.
+#
+# update_diagram:
+#   Description: When true, requires technical plans to include diagram update requirements, ensuring architectural diagrams remain current with implementation changes.
+#
+# lint_tools:
+#   Description: Array of lint and formatting tools to include in technical plans for code quality enforcement (e.g., ruff check --fix, ruff format, mypy --strict).
+#
+# profile_description:
+#   Description: Descriptive summary of the profile's intended use case and process approach.
+
+team_name: pantheon-dev
+
+team_description: The deafult Pantheon custom development team with configurable, auditable, and iterable workflows and team package.
+
+active_profile: plan-and-review
+
+profiles:
+  vibe-coding:
+    profile_description: Optimized for rapid vibe coding. Auto commits and leaves a progress log, with no other checks
+    enforce_tdd: false
+    run_and_fix_tests: false
+    perform_code_review: false
+    draft_commit_message: true
+    auto_commit_each_phase: true
+    enable_progress_log: true
+    read_documentation: false
+    update_documentation: false
+    update_diagram: false
+    lint_tools: []
+
+  run-some-tests:
+    profile_description: Run some tests and read existing docs, along with progress logging and auto commits.
+    enforce_tdd: false
+    run_and_fix_tests: true
+    perform_code_review: false
+    draft_commit_message: true
+    auto_commit_each_phase: true
+    enable_progress_log: true
+    read_documentation: true
+    update_documentation: false
+    update_diagram: false
+    lint_tools: []
+#    - ruff check --fix
+#    - ruff format
+
+  plan-and-review:
+    profile_description: Recommended profile for reliable long term execution with high quality planning and review. Enforces TDD, reads and keeps documentation updated, and keeps track of commit for code review.
+    enforce_tdd: true
+    run_and_fix_tests: true
+    perform_code_review: true
+    draft_commit_message: true
+    auto_commit_each_phase: true
+    enable_progress_log: true
+    read_documentation: true
+    update_documentation: true
+    update_diagram: false
+    lint_tools: []
+#    - ruff check --fix
+#    - ruff format
+
+  check-everything:
+    profile_description: Also updates diagrams for better visualization of the code and architecture. Recommended for complex systems, and easier review of the overall code flow via diagrams.
+    enforce_tdd: true
+    run_and_fix_tests: true
+    perform_code_review: true
+    draft_commit_message: true
+    auto_commit_each_phase: true
+    enable_progress_log: true
+    read_documentation: true
+    update_documentation: true
+    update_diagram: true
+    lint_tools: []
+#    - ruff check --fix
+#    - ruff format
+#    - mypy --strict
+
+#  custom:
+#    profile_description: Custom profile template. Modify as needed.
+#    enforce_tdd: true                 # Mandatory TDD
+#    run_and_fix_tests: true           # All tests must pass
+#    perform_code_review: true         # Comprehensive review required
+#    draft_commit_message: true        # Detailed commit messages are essential
+#    auto_commit_each_phase: true      # Commit frequently for a detailed history
+#    enable_progress_log: true         # Full, detailed logging
+#    read_documentation: true          # The "read" step
+#    update_documentation: true        # The "update" step
+#    update_diagram: true              # The "diagram" step
+#    lint_tools: []                    # Configure as needed

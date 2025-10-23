@@ -1,0 +1,7 @@
+{
+  "allow": [
+    "scribe",
+    "retro"
+  ],
+  "deny": []
+}

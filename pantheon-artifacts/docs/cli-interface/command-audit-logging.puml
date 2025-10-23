@@ -1,0 +1,76 @@
+@startuml
+/'
+@id: cli-interface-command-audit-logging
+@title: Command Audit Logging (CLI → Workspace → JSONL)
+@description: Sequence diagram showing how Pantheon logs CLI commands to an append-only JSONL file for audit trail
+@keywords: [diagram, sequence, cli, audit, logging, jsonl, compliance]
+@relevance: Use this diagram to understand the command audit logging system, including event structure, persistence mechanism, and guardrails against audit directory tampering
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Command Audit Logging (CLI → Workspace → JSONL)
+
+note right of CLI
+Scope:
+  * get process/schema/tempfile
+  * execute
+Excludes: init
+end note
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Command Execution ==
+Agent -> CLI : pantheon execute create-ticket \
+--actor <agent> [--id X] [--sections S]
+activate CLI
+
+CLI -> CLI : Validate actor + permissions
+CLI -> CLI : Execute command (business logic)
+CLI -> CLI : Build audit event
+note right of CLI
+Event fields:
+  timestamp (YYYY-MM-DD hh:mm:ss AM/PM TZ)
+  team (active_team)
+  command (e.g., "execute create-ticket")
+  actor, id, sections (built-ins only)
+  result (success|bad_input|permission_denied|error)
+end note
+
+CLI -> CLI : Log.debug("Audit event: %s", event)
+
+== Audit Persistence ==
+CLI -> Workspace : save_audit_log(event)
+activate Workspace
+
+Workspace -> Workspace : Resolve audit root
+note right of Workspace
+<artifacts_root>/<audit_directory>/
+default audit_directory: pantheon-audit
+end note
+
+Workspace -> Workspace : Compute filename
+note right of Workspace
+YYYY-MM-DD_cli.jsonl (daily file)
+end note
+
+Workspace -> FS : append_text(audit_file, json + "\n")
+activate FS
+FS --> Workspace : OK
+deactivate FS
+Workspace --> CLI : OK (no-op if disabled)
+deactivate Workspace
+
+deactivate CLI
+
+== Guardrails ==
+note over Workspace, FS
+Workspace rejects process artifact I/O to audit dir:
+  * save_artifact() blocks writes
+  * read_artifact() blocks reads
+end note
+
+@enduml

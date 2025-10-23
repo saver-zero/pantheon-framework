@@ -1,0 +1,4 @@
+{
+  allow: ['profile-designer'],
+  deny: [],
+}

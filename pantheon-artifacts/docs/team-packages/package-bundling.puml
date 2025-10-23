@@ -1,0 +1,81 @@
+@startuml
+/'
+@id: team-packages-package-bundling
+@title: Package Bundling - Team Package Inclusion in Distribution
+@description: Sequence diagram showing how team packages are bundled into wheel distributions via pyproject.toml configuration while excluding test fixtures
+@keywords: [diagram, sequence, packaging, bundling, distribution, pyproject, wheel]
+@relevance: Use this diagram to understand how production team templates are bundled for distribution while test fixtures remain excluded from the wheel
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Package Bundling - Team Package Inclusion in Distribution
+
+note right : Team package bundling process:\n• Production teams bundled via pyproject.toml configuration\n• Test fixtures excluded from production builds\n• Package data ensures accessibility after pip installation
+
+participant "Build System" as Build
+participant "pyproject.toml" as Config
+participant "Production Teams\npantheon/_templates/" as ProdTeams
+participant "Test Fixtures\ntests/fixtures/" as TestFixtures
+participant "Wheel Distribution" as Wheel
+participant "Installation" as Install
+participant "Runtime Access" as Runtime
+
+== Package Data Configuration ==
+Build -> Config : Read [tool.setuptools.package-data]
+note over Config : Package data configuration:\npantheon = ["_templates/**/*", "py.typed"]\n• Includes all files in _templates/\n• Recursive wildcard pattern\n• Type information included
+
+Config -> Build : Package inclusion rules
+note right of Config : Configuration ensures:\n• Production team templates bundled\n• Test fixtures NOT included\n• Accessibility after installation
+
+== Production Team Bundling ==
+Build -> ProdTeams : Scan pantheon/_templates/pantheon-teams/
+note over ProdTeams : Production team structure:\npantheon-team-builder/\n├── team-profile.yaml\n├── agents/pantheon.md\n└── processes/\n    ├── create-agent-prompt/\n    └── create-routine/
+
+ProdTeams -> Build : Production team files
+note right of ProdTeams : Bundled in wheel:\n• All team configuration\n• Agent definitions\n• Process workflows\n• Schema and templates
+
+== Test Fixture Exclusion ==
+Build -> TestFixtures : tests/fixtures/ (not in package data)
+note over TestFixtures : Test fixtures NOT bundled:\npantheon-e2e-test/\n├── team-profile.yaml\n├── agents/ticket-handler.md\n└── processes/\n    ├── create-ticket/\n    ├── get-ticket/\n    └── update-plan/
+
+TestFixtures -[#lightgray]-> Build : Excluded from wheel
+note right of TestFixtures : Exclusion ensures:\n• Clean production distribution\n• No development artifacts\n• Smaller package size
+
+== Wheel Creation ==
+Build -> Wheel : python -m build
+note over Wheel : Wheel contents:\n• Framework code (pantheon/)\n• Production teams (_templates/)\n• Metadata and dependencies\n• Entry points for CLI
+
+Wheel -> Wheel : Package team templates as data
+note right of Wheel : Templates become package data:\n• Accessible via pkg_resources\n• Preserved directory structure\n• Available at runtime
+
+== Installation Process ==
+Wheel -> Install : pip install pantheon_framework-*.whl
+Install -> Install : Extract wheel contents
+Install -> Install : Install package data to site-packages
+
+note over Install : Installation includes:\n• Framework modules\n• Bundled team templates\n• CLI entry points\n• Package data preservation
+
+== Runtime Accessibility ==
+Install -> Runtime : Framework installed with templates
+Runtime -> Runtime : Workspace.get_bundled_teams()
+note over Runtime : Runtime access pattern:\n• pkg_resources for data access\n• Workspace facade methods\n• Template discovery and loading
+
+Runtime -> Runtime : pantheon init (uses bundled templates)
+note right of Runtime : Template usage:\n• Copy bundled teams to project\n• Maintain original structure\n• Enable project customization
+
+== Bundle Verification ==
+Runtime -> Runtime : Verify template accessibility
+note over Runtime : Post-installation verification:\n• pantheon init works\n• Team templates accessible\n• Process workflows available\n• Schema compilation succeeds
+
+== Bundle vs Source Comparison ==
+
+note over ProdTeams : **Development (Source)**:\n• Direct file system access\n• pantheon/_templates/ directory\n• Editable with immediate changes\n• Template development workflow
+
+note over Wheel : **Production (Bundled)**:\n• Package data in wheel\n• Extracted to site-packages\n• Static after installation\n• Distribution and deployment
+
+== Key Benefits ==
+note over Build : Bundling advantages:\n• Self-contained distribution\n• No external template dependencies\n• Consistent team availability\n• Offline installation support
+
+note right : Previous: See ../framework-development/build-and-release-workflow.puml for complete process\nSee ../framework-development/template-change-propagation.puml for development vs bundled handling\nRelated: See ../cli-interface/project-init.puml for template usage
+@enduml

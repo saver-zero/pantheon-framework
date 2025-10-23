@@ -1,0 +1,118 @@
+@startuml
+/'
+@id: system-architecture-container-view
+@title: Pantheon Architecture - Container View
+@description: High-level system architecture showing the three-tier clean architecture with presentation, application, and service layers
+@keywords: [diagram, container, architecture, system, layers, clean-architecture]
+@relevance: Use this diagram to understand the overall system architecture, component relationships, and key architectural patterns like dependency inversion, facade, and protection proxy
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Pantheon Architecture - Container View
+
+actor "Human User" as User
+actor "AI Agent" as Agent
+
+rectangle "Pantheon System" as PantheonSystem {
+    component "CLI\n(Presentation Layer - Thin Entry Point)" as CLI
+
+    rectangle "Framework Core" as Core {
+        component "ProcessHandler\n(Application Layer - Orchestrator)" as Handler
+
+        rectangle "Service Layer" as ServiceLayer {
+            component "Pantheon Workspace\n(Service Facade - Single Source of Truth)" as Workspace
+            component "Artifact Engine\n(Pure Computation - No I/O)" as Artifact
+            component "RAE Engine\n(Routine Retrieval)" as RAE
+        }
+
+        component "FileSystem\n(I/O Abstraction - Testability Adapter)" as FileSystem
+
+        note right of Handler
+        * Contains all business logic orchestration
+        * Implements Unified Execute Model
+        * Efficient 2-call operation type detection
+        * Handles reserved parameter processing
+        * Coordinates service layer specialists
+        end note
+
+        note bottom of Workspace
+        * Single source of truth for all filesystem paths
+        * Active team resolution from .pantheon_project
+        * Enforces sandboxing within artifacts_root
+        * Only component that can unwrap PantheonPath
+        end note
+
+        note bottom of Artifact
+        * High-level content-retrieval methods
+        * Semantic URI resolution (artifact-sections://)
+        * Convention Over Configuration
+        end note
+
+        note bottom of Artifact
+        * Pure computation - never performs I/O
+        * Produces PantheonPath (Protection Proxy)
+        * Schema composition with profile injection
+        * Template rendering with built-in variables
+        * Data validation and Jsonnet compilation
+        * Location Methods Exception: find_artifact orchestration
+        end note
+    }
+
+    rectangle "Project Structure" as ProjectStructure {
+        component ".pantheon_project\n(YAML Configuration)" as ProjectConfig
+        component "Team Packages\n(pantheon-teams/<active_team>/)" as TeamPackages
+        component "Shared Artifacts\n(<artifacts_root>/)" as SharedArtifacts
+
+        note right of ProjectConfig
+        Contains:
+        * active_team: <team_name>
+        * artifacts_root: <path>
+
+        Enables multi-team isolation and workspace resolution
+        end note
+
+        note right of TeamPackages
+        Version-controlled team definitions:
+        * agents/<agent>.md
+        * processes/<verb-noun>/
+          * routine.md, schema.jsonnet
+            * artifact/ (templates & configs)
+        * team-profile.yaml
+        * permissions.jsonnet
+        end note
+
+        note right of SharedArtifacts
+        Shared output sandbox:
+        * All teams write here
+        * Organized by process logic
+        * Safe cross-team artifact sharing
+        end note
+    }
+}
+
+User --> CLI : Uses\n(pantheon commands)
+Agent --> CLI : Uses\n(pantheon commands)
+
+CLI --> ProjectConfig : Discovers & loads\n(.pantheon_project)
+CLI --> Handler : Delegates to\nexecute(process_name, input_data)
+
+Handler --> Workspace : Content retrieval\n& artifact saving
+Handler --> Artifact : Schema composition\n& template rendering
+Handler --> RAE : Routine retrieval
+
+Workspace --> FileSystem : All I/O operations\n(Dependency Injection)
+Workspace --> ProjectConfig : Reads configuration
+Workspace --> TeamPackages : Process definitions\n(team context)
+Workspace --> SharedArtifacts : Artifact I/O\n(sandboxed)
+
+RAE --> Workspace : Uses content-retrieval methods
+Artifact --> Handler : Returns PantheonPath\n(Protection Proxy)
+
+FileSystem --> TeamPackages : Source file I/O
+FileSystem --> SharedArtifacts : Artifact file I/O
+FileSystem --> ProjectConfig : Config file I/O
+
+note bottom of PantheonSystem : **ARCHITECTURAL PATTERNS & BENEFITS**\n\n**Three-Tier Clean Architecture:**\n* Presentation (CLI) - Thin entry point, argument parsing\n* Application (ProcessHandler) - Business logic orchestration\n* Service (Workspace, Artifact, RAE) - Specialized components\n\n**Key Design Patterns:**\n* **Dependency Inversion Principle**: FileSystem abstraction enables testability\n* **Facade Pattern**: Workspace provides unified interface to complex file operations\n* **Protection Proxy**: PantheonPath prevents unauthorized I/O operations\n* **Convention Over Configuration**: Standardized paths and naming eliminate boilerplate\n* **Separation of Concerns**: Pure computation (Artifact) vs I/O orchestration (Workspace)\n* **Closed-Loop System (Ingestion Model)**: External data is canonicalized via a CREATE process; all other processes operate only on these native artifacts.\n\n**Benefits:**\n* **Testability**: Mock FileSystem for fast, reliable unit tests\n* **Security**: Sandboxed operations within configurable boundaries\n* **Modularity**: Each component has single, well-defined responsibility\n* **Maintainability**: Clear boundaries and dependency injection\n* **Multi-team Support**: Isolated team packages with shared artifact space
+
+@enduml

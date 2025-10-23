@@ -1,0 +1,66 @@
+@startuml
+/'
+@id: cli-interface-command-processing
+@title: Command Processing - Actor Validation & Permission Checking
+@description: Sequence diagram showing CLI command processing including actor validation, permission checking, and argument parsing into ProcessInput
+@keywords: [diagram, sequence, cli, command-processing, actor-validation, permissions, arguments]
+@relevance: Use this diagram to understand how CLI commands are validated, parsed, and prepared for ProcessHandler delegation
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Command Processing - Actor Validation & Permission Checking
+
+note right over
+This diagram shows command processing after initialization:
+    * Actor validation against available agents
+    * Permission checking for process access
+    * Argument parsing and ProcessInput construction
+
+Previous: See ./framework-init.puml for framework initialization
+Next: See ../process-model/operation-detection.puml for process handling
+end note
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+note over Workspace, FS : All file paths include active team context:\npantheon-teams/<active_team>/processes/<process_name>/\n(active_team resolved during initialization - see ./framework-init.puml)\n\nSee ../architecture-guide/container-view.puml for architectural patterns
+
+Agent -> CLI : pantheon execute get-ticket\n--actor <agent_name>\n--ticket " T012.md "\n--sections plan
+activate CLI
+
+note over CLI : Unified execute model:\nSame command for both\nRead and Write processes
+
+== Actor Validation ==
+
+CLI -> CLI : validate_actor()\nVerify actor name is non-empty
+
+note right of CLI : Actor validation only checks\nthat the name is non-empty.\nAccess control is enforced\nthrough permissions.jsonnet.
+
+== Permission Checking ==
+
+CLI -> Workspace : get_permissions()
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/permissions.jsonnet)
+FS --> Workspace : Permission rules
+Workspace --> CLI : Permission rules
+deactivate Workspace
+CLI -> CLI : Check permissions for get-ticket
+note right over
+Exit code 13 if denied
+Exit code 1 if invalid actor
+end note
+
+== Argument Processing ==
+
+CLI -> CLI : Parse arguments into input_data:\n{"ticket": " T012.md ", "sections": "plan"}
+
+note over CLI : ProcessHandler parses reserved parameters:\n"sections": "plan" → "sections": ["plan"]
+
+CLI -> CLI : Build ProcessInput:\n{process: "get-ticket",\nactor: <agent_name>,\nparameters: enhanced_data}
+
+note over CLI : Ready to delegate to ProcessHandler\nAll validation and parsing complete
+
+@enduml

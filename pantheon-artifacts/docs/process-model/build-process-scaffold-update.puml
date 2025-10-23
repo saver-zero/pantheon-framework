@@ -1,0 +1,185 @@
+@startuml
+/'
+@id: process-model-build-process-scaffold-update
+@title: BUILD Process - Update Scaffolding Sequence
+@description: Detailed UPDATE scaffolding within BUILD process showing consolidated schema generation, section-specific fragments, and import reference creation.
+@keywords: [diagram, sequence, process-model, BUILD, UPDATE-scaffolding, consolidated-schema, section-fragments, multi-section, single-section, import-references]
+@relevance: Use this diagram to understand how BUILD generates consolidated UPDATE processes with section imports, FileSystemLoader templates, and section-order for atomic multi-section operations.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+skinparam backgroundColor white
+skinparam defaultFontSize 10
+skinparam sequenceMessageAlign center
+
+title BUILD Process: Update Scaffolding Sequence
+
+participant "ProcessHandler" as PH
+participant "_BuildContext" as BC
+participant "UpdateComposer" as UC
+participant "Workspace" as WS
+participant "FileSystem" as FS
+
+PH -> PH: _build_scaffold_updates(ctx, input_params, framework_params, compiled_schema)
+activate PH
+
+alt sections.length > 1 (multi-section)
+    PH -> UC: generate_update_schema_jsonnet(section_names)
+    activate UC
+    note right of UC: Creates consolidated schema.jsonnet structure
+
+    UC -> UC: Build section imports dictionary
+    note right of UC
+    local sections = {
+      "context": import "artifact/sections/context.schema.jsonnet",
+      "strategy": import "artifact/sections/strategy.schema.jsonnet",
+      "artifacts": import "artifact/sections/artifacts.schema.jsonnet",
+    };
+
+    Note: Section names use quoted keys to support
+    hyphenated names (e.g., "high-level-overview")
+    end note
+else sections.length === 1 (single-section)
+    PH -> UC: generate_simple_schema_jsonnet(section_names[0])
+    activate UC
+    note right of UC: Creates flat schema.jsonnet structure\nwithout section_updates nesting
+end
+
+UC -> UC: Create consolidated schema structure
+note right of UC
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  type: "object",
+  properties: {
+    section_updates: {
+      type: "object",
+      additionalProperties: false,
+      properties: sections,
+    },
+    section_order: {
+      type: "array",
+      description: "Canonical ordering of sections for default workflows.",
+      items: { type: "string" },
+      default: std.objectFields(sections),
+    },
+  },
+  required: ["section_updates"],
+}
+end note
+
+UC --> PH: schema_jsonnet (consolidated structure)
+deactivate UC
+
+alt sections.length > 1 (multi-section)
+    note over PH: Create consolidated patch template with Jinja2 loop
+
+    PH -> PH: Build multi-section patch_template
+    note right of PH
+    {% set requested_sections = pantheon_sections if pantheon_sections else section_order %}
+    {% for section_name in requested_sections %}
+      {% set snippet = "sections/" ~ section_name ~ ".md" %}
+      {% include snippet ignore missing %}
+    {% endfor %}
+    end note
+else sections.length === 1 (single-section)
+    note over PH: Create simple patch template for whole document
+
+    PH -> PH: Build single-section patch_template
+    note right of PH: Simple template without section iteration:\nDirect content replacement using flat properties
+end
+
+PH -> PH: Create import references
+note right of PH
+target_json = 'import "artifact-sections://get-<artifact>"'
+locator_json = 'import "artifact-locator://get-<artifact>"'
+parser_json = 'import "artifact-parser://get-<artifact>"'
+end note
+
+PH -> WS: scaffold_update_process(bundle_root, update_process_name, ...)
+activate WS
+note right of WS: Creates single update-<artifact> process\nwith consolidated templates
+
+WS -> FS: Create process directory structure
+activate FS
+FS --> WS: Process directory created
+deactivate FS
+
+WS -> FS: Write schema.jsonnet (consolidated)
+activate FS
+note right of FS: Writes consolidated schema.jsonnet that:\n• Imports individual section schemas\n• Defines section_order for canonical iteration\n• Enables section filtering in CLI operations
+FS --> WS: Schema file written
+deactivate FS
+
+WS -> FS: Write patch.md (with section loop)
+activate FS
+FS --> WS: Patch template written
+deactivate FS
+
+alt sections.length > 1 (multi-section)
+    WS -> FS: Write target.jsonnet, locator.jsonnet, parser.jsonnet
+    activate FS
+    note right of FS: target.jsonnet enables section targeting
+    FS --> WS: Import references written (including target.jsonnet)
+    deactivate FS
+else sections.length === 1 (single-section)
+    WS -> FS: Write locator.jsonnet, parser.jsonnet (no target.jsonnet)
+    activate FS
+    note right of FS: Omits target.jsonnet for whole document replacement
+    FS --> WS: Import references written (excluding target.jsonnet)
+    deactivate FS
+end
+
+WS -> FS: Write routine.md (default template)
+activate FS
+FS --> WS: Routine written
+deactivate FS
+
+WS -> FS: Write permissions.jsonnet
+activate FS
+FS --> WS: Permissions written
+deactivate FS
+
+WS --> PH: created_paths (process files)
+deactivate WS
+
+note over PH: Now create individual section fragments
+
+loop for each section in section_names
+    PH -> BC: Get section definition from section_defs
+    activate BC
+    BC --> PH: section_def (template + schema)
+    deactivate BC
+
+    PH -> PH: Fix markdown formatting for snippet_content
+    note right of PH: Uses section template or PLACEHOLDER_MARKER
+
+    PH -> WS: save_artifact(snippet_content, "artifact/sections/<section>.md")
+    activate WS
+    WS -> FS: Write section template fragment
+    activate FS
+    FS --> WS: Section fragment written
+    deactivate FS
+    WS --> PH: fragment_path
+    deactivate WS
+
+    PH -> PH: Serialize section schema to JSON
+
+    PH -> WS: save_artifact(schema_content, "artifact/sections/<section>.schema.jsonnet")
+    activate WS
+    WS -> FS: Write section schema fragment
+    activate FS
+    FS --> WS: Schema fragment written
+    deactivate FS
+    WS --> PH: schema_path
+    deactivate WS
+end
+
+PH --> PH: Return (created_paths, [update_process_name])
+deactivate PH
+
+note over PH: Result: Single consolidated update process\nwith section-specific fragments
+
+note right of PH: Key Benefits of Consolidated Schema:\n• CLI can filter sections with --sections parameter\n• ProcessHandler extracts section_order for defaults\n• Section validation against individual schemas\n• Eliminates combinatorial process explosion\n• Enables atomic multi-section updates\n• Template rendering with FileSystemLoader for includes\n• Section-specific data flattening for direct variable access
+
+@enduml

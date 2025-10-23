@@ -1,0 +1,15 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    # Pin to a specific version of ruff for reproducible checks
+    rev: v0.13.2
+    hooks:
+    -   id: ruff
+        # This runs `ruff check` (linting).
+        # The --fix flag will automatically fix safe errors.
+        # The --exit-non-zero-on-fix flag ensures that if a file was auto-fixed,
+        # the commit is aborted so you can review and stage the changes.
+        args: [--fix, --exit-non-zero-on-fix]
+    -   id: ruff-format
+        # This runs `ruff format` (formatting).

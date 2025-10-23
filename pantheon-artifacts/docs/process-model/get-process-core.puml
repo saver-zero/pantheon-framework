@@ -1,0 +1,118 @@
+@startuml
+/'
+@id: process-model-get-process-core
+@title: GET Process Core Flow
+@description: Core GET/RETRIEVE process execution showing artifact finding with ID normalization, pattern-based location, and section extraction.
+@keywords: [diagram, sequence, process-model, GET, RETRIEVE, artifact-finding, ID-normalization, section-extraction, locator, parser]
+@relevance: Use this diagram to understand GET/RETRIEVE operations including ArtifactEngine's find_artifact decomposition, parser.jsonnet transformations, and locator.jsonnet patterns for artifact discovery.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title GET Process Core Flow
+
+note right over
+This diagram shows the core GET process execution:
+    * ArtifactEngine find_artifact with internal method decomposition
+    * ID normalization using parser.jsonnet transformations
+    * Pattern-based artifact location using locator.jsonnet
+    * Section extraction and JSON formatting
+
+Previous: See ../03-core-flows/operation-detection.puml for process setup
+For complete flow: See get-process-complete.puml
+end note
+
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Artifact Engine\n(Service Layer - Utilities)" as ArtifactEngine
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Artifact Retrieval Phase (GET Operation) ==
+
+note over Handler : GET workflow:\n1. Use ArtifactEngine to find and parse artifact\n2. Return JSON result (no file creation)
+
+Handler -> Handler : execute_get_process(enhanced_parameters)
+activate Handler
+
+Handler -> ArtifactEngine : find_artifact("get-ticket", " T012.md ")
+activate ArtifactEngine
+
+note over ArtifactEngine : Location Methods Exception:\nArtifactEngine orchestrates complex queries\nfor artifact finding/parsing while maintaining\npure computation for generation methods.\nThis follows High Cohesion over Universal Purity.
+
+note over ArtifactEngine : Phase 1: normalize_id using parser.jsonnet\nfrom pantheon-teams/<active_team>/processes/get-ticket/
+
+ArtifactEngine -> ArtifactEngine : _normalize_id("get-ticket", " T012.md ")
+activate ArtifactEngine
+ArtifactEngine -> Workspace : get_artifact_parser("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/parser.jsonnet)
+FS --> Workspace : Parser rules (ID normalization)
+Workspace --> ArtifactEngine : Parser rules
+deactivate Workspace
+
+ArtifactEngine -> ArtifactEngine : Apply transformations:\n1. Strip whitespace: "T012.md"\n2. Extract basename: "T012.md"\n3. Normalize ID: "T012"
+deactivate ArtifactEngine
+
+note over ArtifactEngine : Phase 2: locate_artifact using locator.jsonnet\nfrom pantheon-teams/<active_team>/processes/get-ticket/
+
+ArtifactEngine -> ArtifactEngine : _locate_artifact("get-ticket", "T012")
+activate ArtifactEngine
+ArtifactEngine -> Workspace : get_artifact_locator("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/locator.jsonnet)
+FS --> Workspace : Locator config (artifact finding patterns)
+Workspace --> ArtifactEngine : {"directory": "tickets", "pattern": "^[A-Z]\\d{3}_.*\\.md$"}
+deactivate Workspace
+
+ArtifactEngine -> ArtifactEngine : Extract directory: "tickets"
+ArtifactEngine -> ArtifactEngine : Use regex pattern to filter files
+
+ArtifactEngine -> Workspace : get_matching_artifact(pattern, directory)
+activate Workspace
+Workspace -> Workspace : compile regex pattern
+Workspace -> FS : exists(artifacts_root/tickets)
+FS --> Workspace : true
+Workspace -> FS : iterdir(artifacts_root/tickets) - recursive search
+FS --> Workspace : Found: T012_refactor-init.md
+Workspace --> ArtifactEngine : [PantheonPath("tickets/T012_refactor-init.md")]
+deactivate Workspace
+
+ArtifactEngine --> ArtifactEngine : Return artifact path
+deactivate ArtifactEngine
+ArtifactEngine --> Handler : Return artifact path
+deactivate ArtifactEngine
+
+== Section Extraction Phase ==
+
+Handler -> Workspace : get_artifact_sections_config("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/sections.jsonnet)
+FS --> Workspace : Section markers (defines section boundaries)
+Workspace --> Handler : Section marker definitions
+deactivate Workspace
+
+Handler -> ArtifactEngine : get_artifact_sections(path, ["plan"], section_markers)
+activate ArtifactEngine
+
+ArtifactEngine -> Workspace : read_file(artifact_path)
+activate Workspace
+Workspace -> FS : read_text(artifact_path)
+FS --> Workspace : File content
+Workspace --> ArtifactEngine : File content
+deactivate Workspace
+
+ArtifactEngine -> ArtifactEngine : Parse sections:\n- Find START:PLAN\n- Extract content\n- Check PLACEHOLDER\n- Find END:PLAN
+
+ArtifactEngine --> Handler : Return plan section content
+deactivate ArtifactEngine
+
+== Return Phase (Read Process) ==
+
+Handler -> Handler : Format result as JSON:\n{"sections": {"plan": "..."}}
+deactivate Handler
+
+Handler --> Handler : Return JSON result\n(not a file path)
+
+note over Handler : Efficient Operation Detection:\nProcessHandler.determine_process_type() uses 2 calls:\n1. get_artifact_content_template() → content.md?\n2. get_artifact_patch_template() → patch.md?\n\nActive Team Resolution:\n- .pantheon_project contains: active_team: <team_name>\n- All process files resolved from: pantheon-teams/<active_team>/\n- Workspace provides single source of truth for team context\n\nGET Result:\n- No content.md ✗\n- No patch.md ✗ \n→ Call execute_get_process() with enhanced_parameters\n→ Use ArtifactEngine internal methods for finding
+
+@enduml

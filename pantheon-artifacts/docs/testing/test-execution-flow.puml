@@ -1,0 +1,77 @@
+@startuml
+/'
+@id: testing-test-execution-flow
+@title: Test Execution Flow - Complete Testing Workflow
+@description: Sequence diagram showing the complete testing workflow from environment setup through test execution with common failure scenarios and solutions
+@keywords: [diagram, sequence, testing, workflow, execution, debugging, coverage]
+@relevance: Use this diagram to understand the end-to-end testing workflow including environment setup, CLI verification, test category execution, and debugging techniques
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Test Execution Flow - Complete Testing Workflow
+
+note right : Complete test execution workflow from developer perspective:\n• Framework installation required for E2E tests\n• Test categories can be run independently\n• Common failure scenarios and solutions
+
+participant "Developer" as Dev
+participant "Virtual Environment" as VEnv
+participant "Framework Installation" as Install
+participant "Unit Tests" as Unit
+participant "Integration Tests" as Integration
+participant "E2E Tests" as E2E
+participant "CLI Validation" as CLI
+
+== Environment Setup ==
+Dev -> VEnv : python -m venv .venv && source .venv/bin/activate
+Dev -> Install : pip install -e ".[dev,test]"
+note over Install : Development installation includes:\n• Framework in editable mode\n• All dev dependencies\n• Test dependencies
+
+== CLI Verification ==
+Install -> CLI : pantheon --help
+CLI -> Dev : CLI available confirmation
+note right of CLI : E2E tests require CLI in PATH:\n• Framework must be installed\n• 'pantheon' command must work\n• Installation verification critical
+
+== Test Category Execution ==
+
+=== Unit Tests (No Installation Required) ===
+Dev -> Unit : pytest tests/unit/
+note over Unit : • 489 tests\n• No framework installation needed\n• Mock FileSystem objects\n• Fast execution
+
+Unit -> Dev : Test results (immediate)
+
+=== Integration Tests (No Installation Required) ===
+Dev -> Integration : pytest tests/integration/
+note over Integration : • 23 tests\n• No framework installation needed\n• Real objects, no mocks\n• Moderate speed
+
+Integration -> Dev : Test results (moderate)
+
+=== E2E Tests (Installation Required) ===
+Dev -> E2E : pytest tests/e2e/
+note over E2E : • 25 tests\n• Framework installation REQUIRED\n• Subprocess CLI calls\n• Fixture-based isolation
+
+E2E -> CLI : subprocess.run(['pantheon', 'init'])
+CLI -> E2E : CLI process results
+E2E -> Dev : Test results (comprehensive)
+
+== Common Failure Scenarios ==
+
+note over Dev : **Problem**: E2E tests fail with "pantheon: command not found"\n**Solution**: pip install -e . first, then verify with pantheon --help
+
+note over Dev : **Problem**: Tests pass individually but fail together\n**Solution**: CLI installation state issue - reinstall framework
+
+note over Dev : **Problem**: E2E tests fail with "Unknown actor" errors\n**Solution**: Tests should use pantheon-e2e-test team, not production teams
+
+== Complete Test Suite ==
+Dev -> Dev : pytest (all tests)
+note over Dev : Runs all test categories:\n• Unit tests (489)\n• Integration tests (23)\n• E2E tests (25)\n• Requires installation for E2E portion
+
+== Coverage Analysis ==
+Dev -> Dev : pytest --cov=pantheon --cov-report=term-missing
+note over Dev : Coverage requirements:\n• ≥ 85% coverage for release\n• Missing line reporting\n• Combined across all test tiers
+
+== Debugging Workflow ==
+Dev -> Dev : pytest tests/path/test.py::test_name -v --tb=long
+note over Dev : Debug specific failures:\n• Maximum detail with --tb=long\n• Use --pdb for interactive debugging\n• Use -s for debug output in E2E tests
+
+note right : Previous: See ./e2e-test-architecture.puml for fixture details\nNext: See ../framework-development/development-environment-setup.puml for setup
+@enduml

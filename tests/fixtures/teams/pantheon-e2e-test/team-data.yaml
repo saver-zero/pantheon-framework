@@ -1,0 +1,12 @@
+# Test team data for E2E testing
+# Simple, known paths for testing directory creation feature
+
+path:
+  docs: '{{ pantheon_artifacts_root }}/docs/'
+  reports: '{{ pantheon_artifacts_root }}/reports/'
+  tickets:
+    backlog: '{{ pantheon_artifacts_root }}/tickets/backlog/'
+    active: '{{ pantheon_artifacts_root }}/tickets/active/'
+
+agents:
+  ticket-handler: "Test agent for handling tickets in E2E tests"

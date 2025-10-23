@@ -1,0 +1,148 @@
+@startuml
+/'
+@id: process-model-create-process-core
+@title: CREATE Process Core Flow
+@description: Core CREATE process execution showing template loading, ArtifactEngine generation methods, content rendering, and artifact saving through Workspace.
+@keywords: [diagram, sequence, process-model, CREATE, artifact-generation, template-rendering, JSONL-logging, ProcessHandler, ArtifactEngine]
+@relevance: Use this diagram to understand CREATE process execution focusing on template rendering with built-in variables, path generation, and optional JSONL logging for analytics.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title CREATE Process Core Flow
+
+note right over
+This diagram shows the core CREATE process execution:
+    * Template loading for content.md, placement.jinja, and naming.jinja
+    * ArtifactEngine generation methods (pure computation)
+    * Content rendering with built-in template variables
+    * Path generation and artifact saving through Workspace
+
+Previous: See ../03-core-flows/operation-detection.puml for process setup
+For complete flow: See create-process-complete.puml
+end note
+
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Artifact Engine\n(Service Layer - Utilities)" as ArtifactEngine
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Artifact Creation Phase (CREATE Operation) ==
+
+note over Handler : CREATE workflow:\n1. Load placement and naming templates\n2. Use ArtifactEngine to generate content and path\n3. Save through Workspace\n4. Return file path confirmation
+
+Handler -> Handler : execute_create_process(enhanced_parameters, templates)
+activate Handler
+
+note over Handler : Templates dict already contains:\n- content.md (loaded during operation detection)
+
+Handler -> Workspace : get_artifact_directory_template("create-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/create-ticket/artifact/placement.jinja)
+FS --> Workspace : Directory template: "tickets/"
+Workspace --> Handler : Directory template
+deactivate Workspace
+
+Handler -> Workspace : get_artifact_filename_template("create-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/create-ticket/artifact/naming.jinja)
+FS --> Workspace : Filename template: "T{{ pantheon_artifact_id }}_{{ title | lower | replace(' ', '-') }}.md"
+Workspace --> Handler : Filename template
+deactivate Workspace
+
+note over Handler : All required templates loaded:\n- content.md: Jinja2 template for artifact content\n- placement.jinja: Directory template\n- naming.jinja: Filename template
+
+== Template Rendering Phase ==
+
+Handler -> ArtifactEngine : generate_artifact(templates, enhanced_parameters)
+activate ArtifactEngine
+
+note over ArtifactEngine : Generation Methods (Pure Computation):\nArtifactEngine renders all templates using enhanced parameters\nincluding built-in variables and user-provided data.\nNo I/O operations - only pure template processing.
+
+note over ArtifactEngine : Enhanced parameters include:\n- User data: title, business_context, technical_context\n- Built-ins: pantheon_actor, pantheon_timestamp,\n  pantheon_datestamp, pantheon_artifact_id, pantheon_profile
+
+ArtifactEngine -> ArtifactEngine : Render content template (content.md):\n- Replace {{ title }} with "Refactor init"\n- Replace {{ business_context }} with user content\n- Replace {{ technical_context }} with user content\n- Replace {{ pantheon_actor }} with agent name\n- Replace {{ pantheon_timestamp }} with current timestamp\n- Generate complete ticket markdown content
+
+ArtifactEngine -> ArtifactEngine : Render placement template (placement.jinja):\n- Simple evaluation: "tickets/" → "tickets/"
+ArtifactEngine -> ArtifactEngine : Render naming template (naming.jinja):\n- "T{{ pantheon_artifact_id }}_{{ title | lower | replace(' ', '-') }}.md"\n- Apply filters: "Refactor init" → "refactor-init"\n- Result: "T001_refactor-init.md"
+
+ArtifactEngine -> ArtifactEngine : Create PantheonPath object:\n- Combine directory + filename\n- Path: "tickets/T001_refactor-init.md"\n- PantheonPath prevents direct I/O access
+
+ArtifactEngine --> Handler : Return (rendered_content_string, PantheonPath)
+deactivate ArtifactEngine
+
+== Artifact Saving Phase ==
+
+Handler -> Workspace : save_artifact(content, relative_path)
+activate Workspace
+
+note over Workspace : Workspace Responsibility:\nOnly Workspace can unwrap PantheonPath objects\nfor actual filesystem operations.\nPath resolution within configured artifacts root.
+
+Workspace -> Workspace : Unwrap PantheonPath to absolute path:\nproject_root/pantheon-artifacts/tickets/T001_refactor-init.md
+Workspace -> FS : ensure_directory_exists(pantheon-artifacts/tickets/)
+FS --> Workspace : Directory created/verified
+Workspace -> FS : write_text(full_path, rendered_content)
+FS --> Workspace : File written successfully
+Workspace --> Handler : Return absolute saved path
+deactivate Workspace
+
+== Optional JSONL Logging Phase ==
+
+note over Handler : JSONL logging is optional:\n- Only executed if JSONL templates exist\n- Enables structured logging for analytics\n- Failure doesn't affect main process success
+
+Handler -> Workspace : has_jsonl_templates("create-ticket")
+activate Workspace
+Workspace -> FS : exists(pantheon-teams/<active_team>/processes/create-ticket/artifact/jsonl_naming.jinja)
+Workspace -> FS : exists(pantheon-teams/<active_team>/processes/create-ticket/artifact/jsonl_placement.jinja)
+FS --> Workspace : Template existence check results
+Workspace --> Handler : Return true if both templates exist
+deactivate Workspace
+
+alt JSONL templates exist
+    Handler -> Workspace : get_artifact_jsonl_directory_template("create-ticket")
+    activate Workspace
+    Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/create-ticket/artifact/jsonl_placement.jinja)
+    FS --> Workspace : JSONL directory template: "logs/{{ pantheon_actor }}"
+    Workspace --> Handler : JSONL directory template
+    deactivate Workspace
+
+    Handler -> Workspace : get_artifact_jsonl_filename_template("create-ticket")
+    activate Workspace
+    Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/create-ticket/artifact/jsonl_naming.jinja)
+    FS --> Workspace : JSONL filename template: "{{ pantheon_datestamp }}_tickets.jsonl"
+    Workspace --> Handler : JSONL filename template
+    deactivate Workspace
+
+    Handler -> ArtifactEngine : generate_jsonl_path(jsonl_templates, input_params, framework_params)
+    activate ArtifactEngine
+    ArtifactEngine -> ArtifactEngine : Render JSONL templates:\n- Directory: "logs/{{ pantheon_actor }}" → "logs/agent-name"\n- Filename: "{{ pantheon_datestamp }}_tickets.jsonl" → "2024-01-15_tickets.jsonl"
+    ArtifactEngine --> Handler : Return PantheonPath("logs/agent-name/2024-01-15_tickets.jsonl")
+    deactivate ArtifactEngine
+
+    Handler -> Handler : Create JSONL entry:\n- Include all user input data\n- Add only timestamp from framework for analytics
+
+    Handler -> Workspace : append_jsonl_entry(jsonl_data, jsonl_path)
+    activate Workspace
+    Workspace -> Workspace : Unwrap PantheonPath and validate security
+    Workspace -> FS : ensure_directory_exists(pantheon-artifacts/logs/agent-name/)
+    FS --> Workspace : Directory created/verified
+    Workspace -> FS : append_text(full_jsonl_path, json_line + "\n")
+    FS --> Workspace : JSONL entry appended successfully
+    Workspace --> Handler : Return JSONL file path
+    deactivate Workspace
+
+    note over Handler : JSONL entry includes:\n- All user input parameters\n- Timestamp for temporal analytics\n- Minimal framework overhead for clean data
+else JSONL templates not found
+    note over Handler : JSONL logging skipped\n- No jsonl_naming.jinja or jsonl_placement.jinja\n- Process continues normally with main artifact only
+end
+
+== Return Phase (Write Process) ==
+
+Handler -> Handler : Format result:\n"Artifact created successfully at {saved_path}"
+deactivate Handler
+
+Handler --> Handler : Return ProcessResult with file path\n(not JSON content like GET processes)
+
+note over Handler : Efficient CREATE Operation:\nProcessHandler.determine_process_type() detects CREATE by:\n1. get_artifact_content_template() → content.md found ✓\n→ ProcessType.CREATE\n\nActive Team Resolution:\n- .pantheon_project contains: active_team: <team_name>\n- All process files resolved from: pantheon-teams/<active_team>/\n- Workspace provides single source of truth for team context\n\nCREATE Template Requirements:\n- content.md: Required for CREATE detection and artifact content\n- placement.jinja: Directory template for artifact location\n- naming.jinja: Filename template for unique artifact names\n\nOptional JSONL Logging:\n- jsonl_placement.jinja: JSONL directory template\n- jsonl_naming.jinja: JSONL filename template\n- Enables structured logging for analytics and audit trails\n- Process succeeds even if JSONL generation fails\n\n→ Call execute_create_process() with enhanced_parameters\n→ Use ArtifactEngine generation methods (pure computation)\n→ Return file path confirmation (includes JSONL path if generated)
+
+@enduml

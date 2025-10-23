@@ -1,0 +1,228 @@
+@startuml
+/'
+@id: team-packages-team-profile-usage
+@title: Team Profile Complete Lifecycle - Init to Runtime
+@description: Sequence diagram showing the complete profile lifecycle from init-time selection and persistence to runtime loading and injection into schema compilation
+@keywords: [diagram, sequence, team-profile, schema, template, configuration, pattern, initialization, runtime]
+@relevance: Use this diagram to understand how profiles are selected during init, persisted to team-profile.yaml, and then loaded during runtime for schema compilation and template rendering
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Team Profile Complete Lifecycle: Init to Runtime
+
+actor "User" as User
+participant "CLI (Init)" as InitCLI
+participant "CLI (Execute)" as ExecCLI
+participant "ProcessHandler" as PH
+participant "Workspace" as WS
+participant "ArtifactEngine" as AE
+participant "TeamProfile\n(team-profile.yaml)" as TP
+participant "Schema" as Schema
+participant "Template" as Template
+
+== Init-Time: Profile Selection & Persistence ==
+
+User -> InitCLI: pantheon init
+activate InitCLI
+
+InitCLI -> InitCLI: _select_profile_interactive()
+InitCLI -> User: Display available profiles:\n"1. prototype\n2. standard\n3. production"
+User --> InitCLI: Selects "standard"
+
+InitCLI -> TP: Read bundled team-profile.yaml template
+activate TP
+TP --> InitCLI: YAML content with profiles section
+deactivate TP
+
+InitCLI -> InitCLI: yaml.safe_load() to parse profile data
+InitCLI -> InitCLI: Update: profile_data['active_profile'] = 'standard'
+
+note over InitCLI
+    Persist user's profile selection to team-profile.yaml
+    in the project's team directory, establishing it as
+    the single source of truth for profile configuration
+end note
+
+InitCLI -> TP: Write updated team-profile.yaml to project
+activate TP
+note over TP
+    pantheon-teams/team-name/team-profile.yaml
+    now contains:
+    active_profile: standard
+    profiles:
+      prototype: {...}
+      standard: {...}
+      production: {...}
+end note
+TP --> InitCLI: OK (profile persisted)
+deactivate TP
+
+InitCLI -> User: "Profile 'standard' configured"
+deactivate InitCLI
+
+note over User, TP
+    User can change active_profile at any time by
+    editing team-profile.yaml - changes take effect
+    immediately without requiring project reinit
+end note
+
+== Runtime: Profile Loading & Injection ==
+
+User -> ExecCLI: pantheon execute process-name --param value --actor agent
+activate ExecCLI
+
+ExecCLI -> PH: execute_process()
+activate PH
+
+== Profile Loading & Parsing ==
+PH -> WS: get_team_profile()
+activate WS
+WS -> TP: read team-profile.yaml from project
+activate TP
+TP --> WS: YAML content
+deactivate TP
+WS -> WS: parse YAML
+note right: Extract active_profile='standard'\nand profiles section
+WS --> PH: profile_data (dict)
+deactivate WS
+
+PH -> PH: store_both_profile_formats()
+note right
+  Store TWO formats in framework_params:
+  - BUILTIN_FULL_PROFILE: complete structure
+  - BUILTIN_ACTIVE_PROFILE: extracted config
+
+  if "active_profile" in profile_data:
+    active_config = profiles[active_profile]
+    framework_params[BUILTIN_ACTIVE_PROFILE] = active_config
+    framework_params[BUILTIN_FULL_PROFILE] = profile_data
+  else:
+    framework_params[BUILTIN_ACTIVE_PROFILE] = {}
+    framework_params[BUILTIN_FULL_PROFILE] = profile_data
+end note
+
+== Schema Compilation with Profile Context ==
+PH -> WS: get_process_schema()
+WS --> PH: schema_content (Jsonnet)
+
+PH -> AE: compile_schema(schema_content, framework_params[BUILTIN_FULL_PROFILE])
+activate AE
+
+AE -> AE: prepare external variables
+note right
+  Each profile property becomes
+  an ext_var for Jsonnet:
+  - verbosity="detailed"
+  - enforce_tdd=false
+  - test_type="unit_test_only"
+end note
+
+AE -> Schema: compile Jsonnet with ext_vars
+note right
+  Schema can use profile variables:
+  local verbosity = std.extVar('verbosity');
+  local enforce_tdd = std.extVar('enforce_tdd');
+
+  // Conditional schema fields based on profile
+  if enforce_tdd then
+    { required+: ['test_file'] }
+  else {}
+end note
+
+Schema --> AE: compiled JSON schema
+AE --> PH: validated schema
+deactivate AE
+
+== Template Rendering (Data-Driven) ==
+alt CREATE Process
+  PH -> WS: get_artifact_content_template()
+  WS --> PH: template_content (Jinja2)
+
+  PH -> PH: build_context()
+  note right
+    Context includes:
+    - user parameters (from schema-driven agent response)
+    - pantheon_actor
+    - pantheon_active_profile: active_profile_config (clean access)
+    - pantheon_full_profile: complete structure (rarely used)
+    - pantheon_timestamp
+  end note
+
+  PH -> AE: _render_template(template, context)
+  activate AE
+
+  AE -> Template: render with Jinja2
+  note right
+    CLEAN PATTERN - Template checks for data presence:
+    {% if implementation_steps %}
+      ## Implementation Steps
+      {% for step in implementation_steps %}
+        {% if step.rationale %}
+          {{ step.rationale }}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+
+    {% if test_file %}
+      ## Test Requirements
+      {{ test_code }}
+    {% endif %}
+
+    CLEAN PATTERN: Use data-driven approach
+    ❌ {% if pantheon_active_profile.verbosity == 'detailed' %}  # Profile logic
+    ✅ {% if step.rationale %}  # Data-driven approach
+
+    ACCEPTABLE: Direct profile for execution commands
+    ✅ {% if pantheon_active_profile.lint_tool %}
+        Run: {{ pantheon_active_profile.lint_tool }}
+    {% endif %}
+  end note
+
+  Template --> AE: rendered content
+  AE --> PH: final artifact content
+  deactivate AE
+end
+
+PH --> ExecCLI: execution result
+deactivate PH
+ExecCLI --> User: success/failure
+deactivate ExecCLI
+
+note over User, Template
+  **COMPLETE PROFILE LIFECYCLE**
+
+  Init Time: User Selection → team-profile.yaml (single source of truth)
+  Runtime: team-profile.yaml → Schema Compilation → Template Rendering
+
+  **INIT-TIME PERSISTENCE**
+  - User selects profile during 'pantheon init'
+  - Selection persisted to active_profile field in team-profile.yaml
+  - Located in project's pantheon-teams/team-name/ directory
+  - NOT stored in .pantheon_project (project-level only)
+  - Changes take effect immediately without reinit
+
+  **RUNTIME INJECTION**
+  - ProcessHandler reads active_profile from team-profile.yaml
+  - Profile config injected into schema via std.extVar('profile')
+  - Profile data available in templates via pantheon_active_profile
+  - Creates data-driven workflow: Profile → Schema → Agent → Template
+
+  **CLEAN ARCHITECTURE PATTERN**
+
+  ✅ SMART SCHEMA: Profile controls what fields agent sees
+  ✅ DUMB TEMPLATE: Template renders whatever data was provided
+
+  **TWO-CONSTANT DESIGN**
+  - BUILTIN_FULL_PROFILE: For schema compilation (std.extVar)
+  - BUILTIN_ACTIVE_PROFILE: For template rendering (direct access)
+
+  Benefits:
+  - Single source of truth (team-profile.yaml)
+  - Clear separation: project config vs team config
+  - Profile logic centralized in schemas
+  - Templates remain simple and data-driven
+  - Easy profile switching without reinit
+end note
+
+@enduml

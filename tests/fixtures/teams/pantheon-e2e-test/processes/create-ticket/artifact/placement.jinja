@@ -1,0 +1,1 @@
+{% if sequence_number and sequence_description %}tickets/0_backlog/S{{ '{:02d}'.format(sequence_number) }}-{{ sequence_description }}/{{ assignee | replace('@', '') | slugify }}{% else %}tickets{% if assignee %}/0_backlog/{{ assignee | replace('@', '') | slugify }}{% endif %}{% endif %}

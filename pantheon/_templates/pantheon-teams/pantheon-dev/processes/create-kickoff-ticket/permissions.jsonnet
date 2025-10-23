@@ -1,0 +1,7 @@
+{
+  "allow": [
+    "pantheon-dev"
+  ],
+  "deny": [
+  ]
+}

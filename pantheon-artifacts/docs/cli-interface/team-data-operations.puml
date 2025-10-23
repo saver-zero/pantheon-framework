@@ -1,0 +1,118 @@
+@startuml
+/'
+@id: cli-interface-team-data-operations
+@title: Team Data Operations - Get and Set Commands
+@description: Sequence diagram showing team-data.yaml read/write operations with smart type coercion, deep merge, and dot notation key access
+@keywords: [diagram, sequence, cli, team-data, yaml, configuration, runtime-data]
+@relevance: Use this diagram to understand team-data get/set operations including type coercion for unquoted values, deep merge for nested updates, and framework-controlled file paths
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Team Data Operations - Get and Set Commands
+
+note right : This diagram shows team-data operations:\n• Runtime team data read/write capability\n• Smart type coercion for unquoted values\n• Deep merge preserving existing nested data\n• Framework-determined file paths at team root\n\nFile location: {team_root}/team-data.yaml\nSee ../system-architecture/container-view.puml for architectural patterns
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+note over Workspace, FS : All operations use framework-determined paths:\npantheon-teams/<active_team>/team-data.yaml\n(active_team resolved during initialization)\n\nDependency Injection Pattern:\n• FileSystem abstraction enables testability\n• Workspace provides facade over YAML operations
+
+== GET Team Data Operation ==
+
+Agent -> CLI : pantheon get team-data\n--actor pantheon\n--key agents.backend
+activate CLI
+
+note over CLI : Framework command processing:\n• Actor validation against agents/\n• Direct delegation to Workspace
+
+CLI -> CLI : Validate actor identity
+CLI -> Workspace : get_team_data("agents.backend")
+activate Workspace
+
+Workspace -> Workspace : Resolve team-data.yaml path\npantheon-teams/<active_team>/team-data.yaml
+
+Workspace -> FS : exists(team_data_path)
+FS --> Workspace : boolean
+
+alt File exists
+    Workspace -> FS : read_text(team_data_path)
+    FS --> Workspace : YAML content
+
+    Workspace -> Workspace : Parse YAML content\nyaml.safe_load()
+
+    note over Workspace : Key resolution with dot notation:\n"agents.backend" → nested dictionary access\ndata["agents"]["backend"]
+
+    Workspace -> Workspace : Extract requested key value
+
+    alt Scalar value (str, int, float, bool)
+        Workspace --> CLI : Raw value as string
+        note right : Direct scalar return:\n15 → "15"\ntrue → "true"\n"Backend specialist" → "Backend specialist"
+    else Complex object (dict, list)
+        Workspace -> Workspace : Convert to YAML format\nyaml.dump()
+        Workspace --> CLI : YAML-formatted content
+        note right : Structured data as YAML:\nagents:\n  backend: "Backend specialist"\n  frontend: "Frontend engineer"
+    end
+else File doesn't exist
+    Workspace --> CLI : FileNotFoundError
+end
+deactivate Workspace
+
+CLI --> Agent : Team data content or error
+deactivate CLI
+
+== SET Team Data Operation ==
+
+Agent -> CLI : pantheon set team-data\n--actor pantheon\n--set agents.backend="Backend specialist"\n--set metrics.count=15\n--del old_key
+activate CLI
+
+CLI -> CLI : Parse --set and --del arguments
+note over CLI : Argument processing:\n--set agents.backend="Backend specialist"\n--set metrics.count=15 (unquoted)\n--del old_key
+
+CLI -> CLI : Build updates and deletes dictionaries
+CLI -> Workspace : set_team_data(updates, deletes)
+activate Workspace
+
+note over Workspace : Smart Type Coercion Logic:\nUnquoted values converted to types:\n"15" → 15 (int)\n"87.5" → 87.5 (float)\n"true" → True (bool)\nQuoted values remain strings
+
+Workspace -> Workspace : Apply type coercion to updates\n_coerce_value_type() for each value
+
+Workspace -> Workspace : Parse dot notation into nested structure\n"agents.backend" → {"agents": {"backend": value}}
+
+Workspace -> FS : exists(team_data_path)
+FS --> Workspace : boolean
+
+alt File exists
+    Workspace -> FS : read_text(team_data_path)
+    FS --> Workspace : Existing YAML content
+
+    Workspace -> Workspace : Parse existing data\nyaml.safe_load()
+
+    alt Invalid YAML
+        Workspace --> CLI : ValueError("Invalid YAML")
+    else Valid YAML
+        Workspace -> Workspace : Deep merge with existing data\n_deep_merge(existing, updates)
+        note over Workspace : Deep merge preserves nested structures:\nexisting["agents"]["pantheon"] kept\nnew["agents"]["backend"] added
+
+        Workspace -> Workspace : Delete specified keys\n_delete_nested_key() for each delete
+    end
+else File doesn't exist
+    Workspace -> Workspace : Create new data structure from updates
+end
+
+Workspace -> Workspace : Convert to YAML with proper types\nyaml.dump() with type preservation
+note over Workspace : YAML output maintains types:\ncount: 15 (no quotes)\ndebug: true (no quotes)\nname: "Backend specialist" (quoted string)
+
+Workspace -> FS : write_text(team_data_path, yaml_content)
+FS --> Workspace : success
+
+Workspace --> CLI : Operation completion
+deactivate Workspace
+
+CLI --> Agent : Success confirmation
+deactivate CLI
+
+note over Agent : Result: team-data.yaml updated with:\n• Type-coerced values (15 as int, true as bool)\n• Deep merged nested structures preserved\n• Atomic write operation completed
+
+@enduml

@@ -1,0 +1,160 @@
+@startuml
+/'
+@id: process-development-direct-file-import
+@title: Direct File Import Sequence (Build Process)
+@description: Sequence diagram showing how Jsonnet files can import other files in the same directory with security validation and recursive preprocessing
+@keywords: [diagram, sequence, import, file, jsonnet, preprocessing, security]
+@relevance: Use this diagram to understand direct file imports for shared Jsonnet modules with directory traversal protection and recursive content inlining
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Direct File Import Sequence (Build Process)
+
+actor "AI Agent" as Agent
+participant "CLI" as CLI
+participant "ProcessHandler" as Handler
+participant "Artifact Engine" as AE
+participant "Jsonnet Compiler" as JC
+participant "Pantheon Workspace" as PW
+participant "File System" as FS
+
+note over Agent, FS
+    AI Agent executes: pantheon get schema build-process --actor <agent-name>
+    The build-process schema imports shared build-schema.jsonnet
+    (Direct file import, not semantic URI)
+end note
+
+note over PW, FS
+    Pantheon Workspace -> FileSystem is a full qualified absolute path using pathlib.path
+    including <project_root>/pantheon-teams/<active-team>/ prefixed
+    (not shown in diagram)
+end note
+
+Agent -> CLI: pantheon get schema build-process --actor <agent-name>
+activate CLI
+
+CLI -> CLI: validate_actor() and check_permissions()
+
+CLI -> Handler: get_schema("build-process")
+activate Handler
+
+Handler -> PW: get_team_profile()
+activate PW
+PW -> FS: read_text("/team-profile.yaml")
+activate FS
+FS --> PW: profile YAML content
+deactivate FS
+PW --> Handler: profile content
+deactivate PW
+
+Handler -> Handler: yaml.safe_load(profile_content)
+
+Handler -> PW: get_process_schema("build-process")
+activate PW
+
+PW -> FS: read_text("/processes/build-process/schema.jsonnet")
+activate FS
+FS --> PW: 'import "build-schema.jsonnet"'
+deactivate FS
+
+PW -> PW: _preprocess_content(raw_content, "/processes/build-process/schema.jsonnet", set())
+
+note over PW
+    Direct file import preprocessing:
+    1. Uses regex to find import statements anywhere in line
+       Supports: import "path", local var = import "path", etc.
+    2. For relative paths: validates no directory traversal
+    3. Constructs import path relative to base file's directory
+    4. Reads imported file and recursively preprocesses it
+    5. Directly replaces import statement with processed content
+end note
+
+PW -> PW: resolve_import("build-schema.jsonnet")
+
+note over PW
+    Import resolution logic:
+    • Validate no "/" or "\\" in import path (security)
+    • Construct path: base_path.parent / import_path
+    • Read content directly (FileNotFoundError if missing)
+    • Recursively call _preprocess_content on imported content
+    • Return processed content to replace import statement
+end note
+
+PW -> FS: read_text("/processes/build-process/build-schema.jsonnet")
+activate FS
+FS --> PW: imported file content
+deactivate FS
+
+PW -> PW: _preprocess_content(imported_content, import_file_path, import_stack)
+
+note over PW
+    Content inlining:
+    Import statement directly replaced with processed file content
+    Result: Single preprocessed content string with all imports inlined
+end note
+
+PW --> Handler: preprocessed schema content (imports inlined)
+deactivate PW
+
+Handler -> AE: compile_schema(preprocessed_content, profile_data)
+activate AE
+
+note over AE
+    Compile Jsonnet with profile context
+    All imports already inlined by _preprocess_content()
+    Jsonnet compiler receives single content string with imports replaced
+end note
+
+AE -> JC: _compile_jsonnet(preprocessed_content, {"profile": profile_data})
+activate JC
+
+note right of JC
+    Jsonnet compiles with:
+    1. Single preprocessed content string
+    2. All import statements replaced with actual content
+    3. Profile context as external variable
+
+    No import resolution needed - all content already inlined
+end note
+
+JC --> AE: compiled final schema (JSON)
+deactivate JC
+
+AE --> Handler: compiled schema dict
+deactivate AE
+
+Handler --> CLI: composed JSON schema
+deactivate Handler
+
+CLI -> CLI: json.dumps(compiled_schema, indent=2)
+
+CLI --> Agent: final schema with build configuration
+deactivate CLI
+
+note over Agent
+    AI Agent receives complete schema
+    combining build-process logic
+    with shared build-schema configuration
+    Resolved via direct content inlining in _preprocess_content()
+end note
+
+== Security and Path Resolution Details ==
+
+note over PW
+    Direct File Import Security (Current Implementation):
+    • Regex pattern validates import statement format
+    • Directory traversal blocked: no "/" or "\\" in import_path
+    • Files must be in same directory as importing file
+    • Circular import detection via import_stack parameter
+
+    Content Inlining Logic (Actual):
+    • Uses regex substitution with resolve_import() callback
+    • import_path validated for security (no path separators)
+    • Constructs full path: base_path.parent / import_path
+    • Reads and recursively preprocesses imported content
+    • Import statement directly replaced with processed content
+    • Single-pass processing with immediate content inlining
+end note
+
+@enduml

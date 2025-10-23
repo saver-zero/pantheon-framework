@@ -1,0 +1,6 @@
+{
+  "allow": [
+    "tech-lead"
+  ],
+  "deny": []
+}

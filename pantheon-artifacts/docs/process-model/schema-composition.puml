@@ -1,0 +1,82 @@
+@startuml
+/'
+@id: process-development-schema-composition
+@title: Schema Composition Sequence - Profile-Aware
+@description: Sequence diagram showing how process schemas are retrieved, preprocessed for imports, and compiled with team profile context injection
+@keywords: [diagram, sequence, schema, composition, profile, jsonnet, compilation]
+@relevance: Use this diagram to understand schema composition including import preprocessing, profile context injection via ext_vars, and JSON schema compilation
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Schema Composition Sequence - Profile-Aware
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Artifact Engine\n(Service Layer - Pure Computation)" as Artifact
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+note over Workspace, FS
+    Pantheon Workspace -> FileSystem is a full qualified absolute path using pathlib.path
+    including <project_root>/pantheon-teams/<active-team>/ prefixed
+    (not shown in diagram)
+end note
+
+Agent -> CLI : pantheon get schema update-plan\n--actor <agent_name>
+activate CLI
+
+note over CLI : Retrieves the composed JSON Schema\nfor a process, adjusted by the\nactive Team Profile.
+
+CLI -> CLI : validate_actor()\nVerify actor name is non-empty
+
+note right of CLI : Actor validation only checks\nthat the name is non-empty.\nAccess control is enforced\nthrough permissions.jsonnet.
+
+CLI -> CLI : check_permissions()
+
+CLI -> Workspace : get_process_schema("update-plan")
+activate Workspace
+Workspace -> FS : read_text(/processes/update-plan/schema.jsonnet)
+activate FS
+FS --> Workspace : Raw Jsonnet content with imports
+deactivate FS
+
+note over Workspace : Workspace preprocessing:\n• Parse import statements with regex\n• Replace imports with file content\n• Recursively process nested imports\n• Return single preprocessed content string
+
+Workspace -> Workspace : _preprocess_content(raw_content, file_path)
+Workspace --> CLI : Preprocessed Jsonnet content (imports resolved)
+deactivate Workspace
+
+CLI -> Workspace : get_team_profile()
+activate Workspace
+Workspace -> FS : read_text(team-profile.yaml)
+activate FS
+FS --> Workspace : Profile YAML content
+deactivate FS
+Workspace --> CLI : Profile content
+deactivate Workspace
+
+CLI -> CLI : Parse YAML profile_content with yaml.safe_load()
+CLI -> CLI : Handle structured/simple profile formats\nExtract active_profile_config
+
+note over CLI
+CLI handles profile parsing directly:
+• structured: profiles[active_profile]
+• simple: empty dict {}
+• Passes active_profile_config to ArtifactEngine
+end note
+
+CLI -> Artifact : compile_schema(preprocessed_content, active_profile_config, process_name)
+activate Artifact
+note over Artifact : ArtifactEngine receives:\n• Preprocessed Jsonnet (imports already resolved)\n• Active profile config dictionary\n• Process name for filename context
+Artifact -> Artifact : Compile Jsonnet with profile config as ext_vars\nSanitize JSON Schema structure
+Artifact --> CLI : Composed JSON Schema dict
+deactivate Artifact
+
+CLI -> CLI : json.dumps(compiled_schema, indent=2)
+
+CLI --> Agent : Composed JSON Schema string
+deactivate CLI
+
+@enduml

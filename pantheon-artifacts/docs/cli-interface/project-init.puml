@@ -1,0 +1,611 @@
+@startuml
+/'
+@id: cli-interface-project-init
+@title: Project Initialization Sequence
+@description: Complete sequence diagram showing the pantheon init command flow including team selection, scaffolding, directory creation, and optional multi-platform agent installation for Claude and OpenCode
+@keywords: [diagram, sequence, initialization, project, setup, scaffolding, agents, claude, opencode, multi-platform, cli, end-user]
+@relevance: Use this diagram to understand the complete pantheon init workflow including team discovery, scaffolding, team-data directory creation, and optional multi-platform agent installation demonstrating platform-agnostic architecture with configuration injection
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Project Initialization Sequence
+
+participant "Human User" as User
+participant "CLI" as CLI
+participant "Bundled Resources\n(in tool installation)" as Bundled
+participant "Project Directory\n(on user's filesystem)" as ProjectFS
+
+User -> CLI : pantheon init
+activate CLI
+
+CLI -> CLI : _discover_bundled_teams()
+
+note over CLI, Bundled
+    CLI uses importlib.resources to access
+    pantheon/_templates/pantheon-teams/
+    and discovers available team directories
+end note
+
+CLI -> Bundled : importlib.resources.files("pantheon")/_templates/pantheon-teams/
+activate Bundled
+Bundled --> CLI : Return list: [pantheon-dev, pantheon-team-builder]
+deactivate Bundled
+
+CLI -> CLI : _select_team_interactive(available_teams)
+
+note over CLI, Bundled
+    For each team, CLI loads team_description from
+    team-profile.yaml to display alongside team name
+end note
+
+loop For each available team
+    CLI -> CLI : _load_team_description(team_name)
+    activate CLI
+
+    CLI -> Bundled : Read team-profile.yaml via importlib.resources
+    activate Bundled
+    alt team-profile.yaml exists and valid
+        Bundled --> CLI : YAML content
+        CLI -> CLI : yaml.safe_load() and extract team_description
+        CLI --> CLI : Return description
+    else Missing or malformed
+        Bundled --> CLI : FileNotFoundError or YAMLError
+        note right of CLI : Log warning, continue gracefully
+        CLI --> CLI : Return "No description available"
+    end
+    deactivate Bundled
+    deactivate CLI
+end
+
+alt Single team available
+    CLI -> User : "Using available team: pantheon-dev - {description}"
+else Multiple teams available
+    CLI -> User : Display: "Available starter teams:"
+    loop For each team
+        CLI -> User : "  {number}. {team_name} - {description}"
+    end
+    User -> CLI : Selects "pantheon-dev"
+end
+
+== Profile Selection (Optional) ==
+
+CLI -> CLI : _select_profile_interactive(selected_team)
+activate CLI
+
+CLI -> Bundled : Read team-profile.yaml for selected team
+activate Bundled
+alt Team supports profiles
+    Bundled --> CLI : YAML content with profiles section
+    CLI -> CLI : yaml.safe_load() and extract profiles
+
+    CLI -> User : Display available profiles:\n"1. prototype\n2. standard\n3. production"
+    User -> CLI : Selects profile (e.g., "standard")
+
+    CLI --> CLI : Return selected_profile = "standard"
+else Team has no profiles
+    Bundled --> CLI : YAML without profiles section or FileNotFoundError
+    CLI --> CLI : Return selected_profile = None
+end
+deactivate Bundled
+deactivate CLI
+
+note over CLI
+    Profile selection is optional and only occurs
+    for teams that define a profiles section in
+    their team-profile.yaml template
+end note
+
+CLI -> CLI : Check if .pantheon_project exists (is_existing_project)
+
+CLI -> CLI : Set up project directory paths
+
+CLI -> ProjectFS : Create directory `pantheon-teams/` (if needed)
+activate ProjectFS
+ProjectFS --> CLI : OK
+deactivate ProjectFS
+
+alt Team does not exist in project
+    CLI -> CLI : _scaffold_new_team(selected_team)
+
+    CLI -> Bundled : Access team template files
+    activate Bundled
+    Bundled --> CLI : Return file tree
+    deactivate Bundled
+
+    CLI -> ProjectFS : Copy team structure (agents/, processes/, etc.)
+    activate ProjectFS
+    ProjectFS --> CLI : OK
+    deactivate ProjectFS
+
+    CLI -> CLI : Generate team-profile.yaml with enhanced documentation
+
+    note over CLI
+        Uses enhanced YAML filter with schema information:
+        1. Extract profile properties from schema
+        2. Generate "Profile Properties Documentation" header
+        3. Add descriptions, types, enum options for each property
+        4. Create clean YAML structure without repetitive comments
+    end note
+
+    CLI -> ProjectFS : Write enhanced team-profile.yaml with documentation header
+    activate ProjectFS
+
+    note over CLI, ProjectFS
+        Generated YAML includes:
+        # Profile Properties Documentation:
+        # verbosity: Level of detail (brief/standard/detailed)
+        # enforce_tdd: Whether to enforce TDD (true/false)
+        # test_type: Types of tests (unit/integration/both)
+
+        team_name: pantheon-dev
+        active_profile: development
+        profiles: ...
+    end note
+
+    ProjectFS --> CLI : OK
+    deactivate ProjectFS
+
+    CLI -> User : "Setting up team 'pantheon-dev' with default profile..."
+
+    == Update Profile in team-profile.yaml ==
+
+    alt selected_profile is not None
+        CLI -> ProjectFS : Read team-profile.yaml from project
+        activate ProjectFS
+        ProjectFS --> CLI : YAML content
+        deactivate ProjectFS
+
+        CLI -> CLI : yaml.safe_load() to parse profile data
+
+        CLI -> CLI : Update active_profile field:\nprofile_data['active_profile'] = selected_profile
+
+        note over CLI
+            This step persists the user's profile selection
+            to team-profile.yaml, establishing it as the
+            single source of truth for profile configuration
+        end note
+
+        CLI -> ProjectFS : Write updated team-profile.yaml
+        activate ProjectFS
+        ProjectFS --> CLI : OK
+        deactivate ProjectFS
+
+        CLI -> User : "Profile '{selected_profile}' configured"
+    else selected_profile is None
+        note over CLI : No profile selected - skip update
+    end
+
+else Team already exists in project
+    note over CLI : Skip team copy - preserve user modifications
+
+    == Update Profile in Existing Team ==
+
+    alt selected_profile is not None
+        CLI -> ProjectFS : Read existing team-profile.yaml
+        activate ProjectFS
+        ProjectFS --> CLI : YAML content
+        deactivate ProjectFS
+
+        CLI -> CLI : yaml.safe_load() to parse profile data
+
+        CLI -> CLI : Update active_profile field:\nprofile_data['active_profile'] = selected_profile
+
+        CLI -> ProjectFS : Write updated team-profile.yaml
+        activate ProjectFS
+        ProjectFS --> CLI : OK
+        deactivate ProjectFS
+
+        CLI -> User : "Profile '{selected_profile}' configured"
+    else selected_profile is None
+        note over CLI : No profile update needed
+    end
+end
+
+CLI -> ProjectFS : Create directory `pantheon-artifacts/` (if needed)
+activate ProjectFS
+ProjectFS --> CLI : OK
+deactivate ProjectFS
+
+CLI -> ProjectFS : Create directory `pantheon-artifacts/tmp/`
+activate ProjectFS
+ProjectFS --> CLI : OK
+deactivate ProjectFS
+
+CLI -> ProjectFS : Write `pantheon-artifacts/.gitignore` (content: '/tmp/\n')
+activate ProjectFS
+ProjectFS --> CLI : OK
+deactivate ProjectFS
+
+CLI -> CLI : _extract_team_data_paths()
+
+note over CLI
+    Extract directory paths from team-data.yaml:
+    1. Read team-data.yaml via workspace.get_team_data()
+    2. Render Jinja2 templates with context variables
+    3. Parse YAML and extract all path values
+    4. Convert to absolute Path objects
+end note
+
+alt team-data.yaml exists with path values
+    CLI -> CLI : _create_team_data_directories()
+
+    note over CLI
+        Create directories with security validation:
+        1. Validate paths are within project boundaries
+        2. Use FileSystem.mkdir() with parents=True
+        3. Log warnings for invalid paths
+        4. Return list of created directories
+    end note
+
+    CLI -> ProjectFS : Create directories from team-data.yaml paths
+    activate ProjectFS
+    ProjectFS --> CLI : OK (directories created)
+    deactivate ProjectFS
+
+    CLI -> CLI : Track count of created directories
+else No team-data.yaml or no path values
+    note over CLI : Skip directory creation gracefully
+end
+
+== Optional Multi-Platform Agent Installation ==
+
+note over CLI
+    Platform-Agnostic Architecture:
+    Both Claude and OpenCode installations delegate
+    to shared _copy_agents_to_platform() method with
+    platform-specific configuration injection.
+end note
+
+== Claude Agent Installation ==
+
+CLI -> User : Prompt: "Do you want to auto-install team agents for Claude? [y/N]"
+User --> CLI : Response (default: No)
+
+alt User accepts Claude installation
+    CLI -> CLI : _prompt_claude_agent_installation(team_name, team_dir, project_root)
+    activate CLI
+
+    CLI -> CLI : _discover_team_agents(team_dir)
+
+    note over CLI
+        Discover agent files:
+        1. Check if agents/ directory exists
+        2. Scan for *.md files using FileSystem.glob
+        3. Return list of agent file paths
+    end note
+
+    alt Agent files found
+        CLI -> CLI : Create platform_config:\n{\n  'target_base_dir': '.claude/agents',\n  'platform_display_name': 'Claude',\n  'validation_base': project_root / '.claude' / 'agents'\n}
+
+        note over CLI
+            Platform configuration controls:
+            • target_base_dir: .claude/agents/
+            • platform_display_name: Claude
+            • validation_base: Security boundary
+        end note
+
+        CLI -> CLI : _copy_agents_to_platform(agent_files, team_name,\nteam_dir, project_root, platform_config)
+        activate CLI
+
+        CLI -> ProjectFS : Create .claude/agents/<team-name>/ directory
+        activate ProjectFS
+        ProjectFS --> CLI : OK
+        deactivate ProjectFS
+
+        loop For each agent file
+            CLI -> ProjectFS : Check if destination file exists
+            ProjectFS --> CLI : Exists/NotExists
+
+            alt File conflict detected
+                CLI -> User : Prompt conflict resolution: (o)verwrite all / (s)kip all / (a)sk each
+                User --> CLI : Resolution choice (stored for subsequent conflicts)
+
+                alt User chooses overwrite or confirms this file
+                    CLI -> ProjectFS : Read agent file content
+                    ProjectFS --> CLI : Content
+                    CLI -> ProjectFS : Write to .claude/agents/<team-name>/
+                    ProjectFS --> CLI : OK (installed)
+                else User chooses skip
+                    note over CLI : Skip this agent file
+                end
+            else No conflict
+                CLI -> ProjectFS : Read agent file content
+                ProjectFS --> CLI : Content
+                CLI -> ProjectFS : Write to .claude/agents/<team-name>/
+                ProjectFS --> CLI : OK (installed)
+            end
+        end
+
+        CLI --> CLI : Return {installed: M, skipped: N, failed: 0}
+        deactivate CLI
+
+        CLI -> CLI : _display_platform_agent_installation_result(results, team_name, platform_config)
+
+        note over CLI : Display: "Installed M agents to .claude/agents/<team-name>/"
+
+    else No agent files found
+        note over CLI : No agents to install, continue gracefully
+    end
+
+    deactivate CLI
+else User declines Claude installation
+    note over CLI : Skip Claude agent installation
+end
+
+== OpenCode Agent Installation ==
+
+CLI -> User : Prompt: "Do you want to auto-install team agents for OpenCode? [y/N]"
+User --> CLI : Response (default: No)
+
+alt User accepts OpenCode installation
+    CLI -> CLI : _prompt_opencode_agent_installation(team_name, team_dir, project_root)
+    activate CLI
+
+    CLI -> CLI : _discover_team_agents(team_dir)
+
+    note over CLI : Uses same discovery logic as Claude
+
+    alt Agent files found
+        CLI -> CLI : Create platform_config:\n{\n  'target_base_dir': '.opencode/agent',\n  'platform_display_name': 'OpenCode',\n  'validation_base': project_root / '.opencode' / 'agent'\n}
+
+        note over CLI
+            Platform configuration controls:
+            • target_base_dir: .opencode/agent/
+              (singular 'agent' per OpenCode convention)
+            • platform_display_name: OpenCode
+            • validation_base: Security boundary
+        end note
+
+        CLI -> CLI : _copy_agents_to_platform(agent_files, team_name,\nteam_dir, project_root, platform_config)
+        activate CLI
+
+        note over CLI
+            SHARED IMPLEMENTATION:
+            Same _copy_agents_to_platform() method
+            handles both Claude and OpenCode through
+            configuration injection. Conflict resolution,
+            error handling, and business logic identical.
+        end note
+
+        CLI -> ProjectFS : Create .opencode/agent/<team-name>/ directory
+        activate ProjectFS
+        ProjectFS --> CLI : OK
+        deactivate ProjectFS
+
+        loop For each agent file
+            CLI -> ProjectFS : Check if destination file exists
+            ProjectFS --> CLI : Exists/NotExists
+
+            alt File conflict detected
+                CLI -> User : Prompt conflict resolution: (o)verwrite all / (s)kip all / (a)sk each
+                User --> CLI : Resolution choice (stored for subsequent conflicts)
+
+                alt User chooses overwrite or confirms this file
+                    CLI -> ProjectFS : Read agent file content
+                    ProjectFS --> CLI : Content
+                    CLI -> ProjectFS : Write to .opencode/agent/<team-name>/
+                    ProjectFS --> CLI : OK (installed)
+                else User chooses skip
+                    note over CLI : Skip this agent file
+                end
+            else No conflict
+                CLI -> ProjectFS : Read agent file content
+                ProjectFS --> CLI : Content
+                CLI -> ProjectFS : Write to .opencode/agent/<team-name>/
+                ProjectFS --> CLI : OK (installed)
+            end
+        end
+
+        CLI --> CLI : Return {installed: M, skipped: N, failed: 0}
+        deactivate CLI
+
+        CLI -> CLI : _display_platform_agent_installation_result(results, team_name, platform_config)
+
+        note over CLI : Display: "Installed M agents to .opencode/agent/<team-name>/"
+
+    else No agent files found
+        note over CLI : No agents to install, continue gracefully
+    end
+
+    deactivate CLI
+else User declines OpenCode installation
+    note over CLI : Skip OpenCode agent installation
+end
+
+== Optional CLAUDE.md Protocol Append ==
+
+CLI -> ProjectFS : Check if .claude directory exists
+activate ProjectFS
+ProjectFS --> CLI : Exists/NotExists
+deactivate ProjectFS
+
+CLI -> CLI : Set smart default based on .claude detection
+
+note over CLI
+    Smart Default Logic:
+    • If .claude exists: default = Yes [Y/n]
+    • If .claude missing: default = No [y/N]
+end note
+
+CLI -> ProjectFS : Check if CLAUDE.md exists
+activate ProjectFS
+ProjectFS --> CLI : Exists/NotExists
+deactivate ProjectFS
+
+alt CLAUDE.md exists
+    CLI -> ProjectFS : Read CLAUDE.md content
+    activate ProjectFS
+    ProjectFS --> CLI : File content
+    deactivate ProjectFS
+
+    CLI -> CLI : Search for protocol marker\n('# Subagent Invocation Protocol')
+
+    alt Protocol marker found
+        note over CLI : Protocol already exists - skip append
+    else Protocol marker not found
+        CLI -> User : Prompt: "Do you want to append Pantheon\nsubagent protocol to CLAUDE.md?" [Y/n or y/N]
+        User --> CLI : Response (context-aware default)
+
+        alt User accepts append
+            CLI -> Bundled : Access claude_instructions.md via importlib.resources
+            activate Bundled
+            Bundled --> CLI : Protocol content
+            deactivate Bundled
+
+            CLI -> ProjectFS : Append protocol to CLAUDE.md\n(with section separator: \n\n---\n\n)
+            activate ProjectFS
+            ProjectFS --> CLI : OK (appended)
+            deactivate ProjectFS
+
+            CLI -> CLI : Track result: "Appended protocol to existing CLAUDE.md"
+        else User declines append
+            note over CLI : Skip protocol append, continue with init
+        end
+    end
+else CLAUDE.md does not exist
+    CLI -> User : Prompt: "Do you want to append Pantheon\nsubagent protocol to CLAUDE.md?" [Y/n or y/N]
+    User --> CLI : Response (context-aware default)
+
+    alt User accepts append
+        CLI -> Bundled : Access claude_instructions.md via importlib.resources
+        activate Bundled
+        Bundled --> CLI : Protocol content
+        deactivate Bundled
+
+        CLI -> ProjectFS : Create CLAUDE.md with protocol content
+        activate ProjectFS
+        ProjectFS --> CLI : OK (created)
+        deactivate ProjectFS
+
+        CLI -> CLI : Track result: "Created CLAUDE.md with protocol"
+    else User declines append
+        note over CLI : Skip protocol append, continue with init
+    end
+end
+
+note over CLI
+    Error Handling:
+    • Any append failures logged as warnings
+    • Never block init completion
+    • Return error description for user feedback
+end note
+
+== Optional AGENTS.md Instructions Append ==
+
+CLI -> ProjectFS : Check if AGENTS.md exists
+activate ProjectFS
+ProjectFS --> CLI : Exists/NotExists
+deactivate ProjectFS
+
+alt AGENTS.md exists
+    CLI -> ProjectFS : Read AGENTS.md content
+    activate ProjectFS
+    ProjectFS --> CLI : File content
+    deactivate ProjectFS
+
+    CLI -> CLI : Search for instruction marker\n('# Operating Protocol')
+
+    alt Instruction marker found
+        note over CLI : Instructions already exist - skip append
+    else Instruction marker not found
+        CLI -> User : Prompt: "Do you want to append Pantheon\ninstructions to AGENTS.md for Codex integration?" [y/N]
+        User --> CLI : Response (default: No)
+
+        alt User accepts append
+            CLI -> Bundled : Access codex_instructions.md via importlib.resources
+            activate Bundled
+            Bundled --> CLI : Instruction content
+            deactivate Bundled
+
+            CLI -> ProjectFS : Append instructions to AGENTS.md\n(with section separator: \n\n---\n\n)
+            activate ProjectFS
+            ProjectFS --> CLI : OK (appended)
+            deactivate ProjectFS
+
+            CLI -> CLI : Track result: "Appended Pantheon instructions to existing AGENTS.md"
+        else User declines append
+            note over CLI : Skip instructions append, continue with init
+        end
+    end
+else AGENTS.md does not exist
+    CLI -> User : Prompt: "Do you want to append Pantheon\ninstructions to AGENTS.md for Codex integration?" [y/N]
+    User --> CLI : Response (default: No)
+
+    alt User accepts append
+        CLI -> Bundled : Access codex_instructions.md via importlib.resources
+        activate Bundled
+        Bundled --> CLI : Instruction content
+        deactivate Bundled
+
+        CLI -> ProjectFS : Create AGENTS.md with instruction content
+        activate ProjectFS
+        ProjectFS --> CLI : OK (created)
+        deactivate ProjectFS
+
+        CLI -> CLI : Track result: "Created AGNES.md with Pantheon instructions"
+    else User declines append
+        note over CLI : Skip instructions append, continue with init
+    end
+end
+
+note over CLI
+    Conservative Default:
+    • Default = No [y/N] (avoids unexpected modifications)
+    • Error Handling same as CLAUDE.md append
+    • Never block init completion
+end note
+
+CLI -> ProjectFS : Write/Update `.pantheon_project` file
+activate ProjectFS
+
+note over CLI, ProjectFS
+    Content includes ONLY project-level settings:
+    # Pantheon project configuration
+    active_team: pantheon-dev
+    artifacts_root: pantheon-artifacts
+
+    NOTE: active_profile is NOT stored here.
+    Profile configuration lives in team-profile.yaml
+    within the team's directory, making it the
+    single source of truth for profile settings.
+end note
+
+ProjectFS --> CLI : OK
+deactivate ProjectFS
+
+note over CLI
+    Build success message with optional components:
+    1. Base: "Project initialized successfully with team 'X'"
+    2. + Directory creation feedback if applicable
+    3. + Claude agent installation results if applicable
+    4. + OpenCode agent installation results if applicable
+    5. + CLAUDE.md protocol append results if applicable
+    6. + AGENTS.md instructions append results if applicable
+end note
+
+alt New project
+    alt Multiple optional components
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Created N directories from team-data paths. Installed M agents to .claude/agents/pantheon-dev/. Installed P agents to .opencode/agent/pantheon-dev/. Created CLAUDE.md with protocol. Created AGENTS.md with Pantheon instructions."
+    else Only directories created
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Created N directories from team-data paths."
+    else Claude agents installed
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Installed M agents to .claude/agents/pantheon-dev/"
+    else OpenCode agents installed
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Installed P agents to .opencode/agent/pantheon-dev/"
+    else Both platform agents installed
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Installed M agents to .claude/agents/pantheon-dev/. Installed P agents to .opencode/agent/pantheon-dev/"
+    else Only CLAUDE.md append
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Appended protocol to existing CLAUDE.md."
+    else Only AGENTS.md append
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'. Appended Pantheon instructions to existing AGENTS.md."
+    else Base message only
+        CLI --> User : "Project initialized successfully with team 'pantheon-dev'."
+    end
+else Existing project
+    CLI --> User : "Project updated successfully. Team 'pantheon-dev' installed." (+ optional components)
+end
+
+deactivate CLI
+
+@enduml

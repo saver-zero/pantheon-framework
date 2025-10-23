@@ -1,0 +1,83 @@
+@startuml
+/'
+@id: cli-interface-framework-init
+@title: Framework Initialization - Project Discovery & Active Team Resolution
+@description: Sequence diagram showing how the framework discovers the project root, loads active team configuration, and sets up dependency injection
+@keywords: [diagram, sequence, initialization, framework, project-discovery, team-resolution, dependency-injection, cli, end-user]
+@relevance: Use this diagram to understand the framework initialization phase, including project root discovery, active team resolution, and profile selection during pantheon init
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Framework Initialization - Project Discovery & Active Team Resolution
+
+note right over
+This diagram shows the initialization phase where the framework:
+    * Discovers the project root by finding .pantheon_project marker
+    * Loads configuration to determine the active team
+    * Sets up dependency injection for testability
+
+Next: See ../cli-interface/command-processing.puml for command handling
+end note
+
+participant "CLI\n(Presentation Layer)" as CLI
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Project Discovery & Active Team Resolution ==
+== Architectural Pattern: Dependency Inversion Principle ==
+
+note over CLI : CLI initialization discovers project and loads active team\nSee ./container-view.puml for architectural patterns
+CLI -> Workspace : discover_project_root(filesystem, ".")
+activate Workspace
+Workspace -> FS : exists(.pantheon_project marker)
+FS --> Workspace : project_root path
+Workspace --> CLI : project_root discovered
+deactivate Workspace
+
+CLI -> Workspace : load_project_config(filesystem, project_root)
+activate Workspace
+Workspace -> FS : read_text(.pantheon_project)
+FS --> Workspace : YAML config content
+Workspace -> Workspace : Parse YAML:\nactive_team: <team_name>\nartifacts_root: pantheon-artifacts
+Workspace --> CLI : ProjectConfig{active_team, artifacts_root}
+deactivate Workspace
+
+note over CLI : Create workspace with discovered configuration
+CLI -> Workspace : PantheonWorkspace(project_root, artifacts_root, filesystem)
+activate Workspace
+Workspace -> Workspace : Store active_team from config for all operations
+note right of Workspace : All subsequent operations use:\npantheon-teams/<active_team>/ as base path
+
+note over CLI, Workspace : Framework ready - CLI instance created with injected dependencies\nActive team resolved for all subsequent process operations
+
+== Profile Selection During Init ==
+
+note over CLI : During 'pantheon init', profile selection occurs\nafter team selection and before .pantheon_project creation
+
+CLI -> CLI : _select_profile_interactive(team_name)
+activate CLI
+note right of CLI : Reads bundled team-profile.yaml\nusing importlib.resources
+CLI -> CLI : Load team-profile.yaml from bundled templates
+CLI -> CLI : Parse YAML and extract 'profiles' section
+
+alt Single profile available
+    CLI -> CLI : Auto-select profile
+    note over CLI : Display: "Using profile: <name> - <description>"
+else Multiple profiles available
+    CLI -> CLI : Display numbered list with descriptions
+    note over CLI : User selects profile or accepts default [1]
+else No profiles defined
+    CLI -> CLI : Return None (skip profile selection)
+    note over CLI : Maintains backward compatibility
+end
+
+CLI --> CLI : selected_profile (or None)
+deactivate CLI
+
+CLI -> FS : Write .pantheon_project configuration
+note over FS : Includes active_team and active_profile (if selected)\nactive_profile line only added when profile chosen
+
+note over CLI : Project initialized with team and profile\nProfile context available for process execution via std.extVar('profile')
+
+@enduml

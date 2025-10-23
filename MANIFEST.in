@@ -1,0 +1,3 @@
+include pantheon/py.typed
+graft pantheon/_templates
+global-exclude AGENTS.md CLAUDE.md GEMINI.md

@@ -1,0 +1,197 @@
+@startuml
+/'
+@id: process-model-build-process
+@title: BUILD Process - Process Family Generation
+@description: BUILD process type showing how a single build-spec intelligently scaffolds an entire process family with CREATE, GET, and consolidated UPDATE processes.
+@keywords: [diagram, sequence, process-model, BUILD, process-family-generation, build-spec, CREATE-scaffolding, GET-scaffolding, UPDATE-scaffolding, consolidated-processes]
+@relevance: Use this diagram to understand BUILD operations that generate complete process families from a single build-spec including enhanced ID formats, semantic URIs, and consolidated multi-section UPDATE processes.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title BUILD Process - Process Family Generation
+
+note right : This diagram shows the sequence for the **BUILD** process type.\nIt illustrates how a single `execute build-process` command uses one\nbuild-spec to intelligently scaffold an entire process family:\n• **CREATE** process (from build-spec with context auto-injection)\n• **GET** process (derived from CREATE with enhanced ID format)\n• **UPDATE** process (single consolidated process handling all sections)
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "Artifact Engine\n(Pure Computation)" as ArtifactEngine
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Phase 1: Agent Gets the Schema for the Build Specification ==
+
+Agent -> CLI : pantheon get schema build-process
+activate CLI
+
+CLI -> Handler : get_schema("build-process")
+activate Handler
+
+Handler -> Workspace : get_process_schema("build-process")
+activate Workspace
+
+note right of Workspace : The Workspace reads the conventional `schema.jsonnet`\nwhich imports the build specification schema.\nThe Jsonnet compiler resolves the import and returns\nthe complete schema from `build-schema.json`.
+
+Workspace -> FS : read_text(.../build-process/schema.jsonnet)
+FS --> Workspace : Content: `import 'build-schema.json'`
+
+note over Workspace : Jsonnet compiler processes the import
+
+Workspace -> FS : read_text(.../build-process/build-schema.json)
+FS --> Workspace : Complete JSON schema with $defs definitions
+
+Workspace --> Handler : Return compiled JSON Schema for build process
+deactivate Workspace
+
+Handler --> CLI : Return JSON Schema
+deactivate Handler
+
+CLI --> Agent : Return JSON Schema
+deactivate CLI
+
+note over Agent : Agent now has the exact structure for the build-spec,\nwhich defines the CREATE process and metadata for the\nGET/UPDATE processes.
+
+== Phase 2: Agent Executes the Build Process ==
+
+Agent -> CLI : pantheon execute build-process --from-file build-spec.json
+activate CLI
+
+CLI -> FS : read_text(build-spec.json)
+FS --> CLI : JSON build-spec content
+CLI -> Handler : execute("build-process", input_data={build_spec})
+activate Handler
+
+== Process Type Detection & Context Initialization ==
+
+Handler -> Handler : determine_process_type("build-process")
+note over Handler : Check for build-schema.json existence
+
+Handler -> Workspace : has_build_schema("build-process")
+activate Workspace
+Workspace -> FS : exists(.../build-process/build-schema.json)
+FS --> Workspace : true
+Workspace --> Handler : true
+deactivate Workspace
+
+note over Handler : Operation type detected as **BUILD**
+
+Handler -> Handler : execute_build_process(enhanced_parameters)
+
+== Phase 1: Initialize and Validate BUILD Context ==
+
+Handler -> Handler : _build_init_context(process_name, enhanced_parameters)
+
+note over Handler : 1. Extract user parameters (exclude built-ins)\n2. Restore original "sections" business parameter\n3. Validate against build-schema\n4. Extract build-spec fields: target_team, artifact, sections, etc.\n5. Auto-inject context section as second section when enabled\n6. Compile section schemas using ArtifactEngine (per-section without $schema)\n7. Create immutable _BuildContext with all state\n\nSections use hyphenated names directly (e.g., "high-level-overview")\nwithout camelCase transformation throughout the BUILD process
+
+Handler -> Handler : _validate_input_and_compile_schema(process_name, user_parameters)
+Handler -> Workspace : get_process_directory_template(process_name)
+activate Workspace
+Workspace --> Handler : directory.jinja template
+deactivate Workspace
+
+Handler -> ArtifactEngine : _render_template(dir_template, template_context)
+activate ArtifactEngine
+ArtifactEngine --> Handler : Rendered bundle directory path
+deactivate ArtifactEngine
+
+== Phase 2: Scaffold CREATE Process ==
+
+Handler -> Handler : _build_scaffold_create(build_context)
+
+note over Handler : 1. Generate artifact acronym for ID format\n2. Always generate section toggle pattern:\n   • Schema: sections array with name/schema/enabled flags\n   • Template: {% set _include_section = true/false %} declarations\n   • build_mode parameter determines enabled flag defaults:\n     - complete: all enabled flags = true\n     - modular: only initial enabled = true, others = false\n3. Use std.foldl composition to conditionally merge properties and required fields\n   based on enabled flags (sections array with name/schema/enabled objects\n   using quoted hyphenated names)\n4. Create enhanced naming template with [ACRONYM{artifact_id}]_ prefix\n5. Handle permissions based on build_mode:\n   • complete: merge create + update permissions\n   • modular: use only create permissions
+
+Handler -> Workspace : scaffold_create_process(bundle_root, create_proc, content_md, placement, enhanced_naming, merged_schema_json, perms_create)
+activate Workspace
+
+Workspace -> FS : Write artifact/content.md
+Workspace -> FS : Write artifact/placement.jinja
+Workspace -> FS : Write artifact/naming.jinja
+Workspace -> FS : Write schema.jsonnet
+Workspace -> FS : Write permissions.jsonnet (optional)
+Workspace -> FS : Copy default routine.md
+
+FS --> Workspace : Files written successfully
+Workspace --> Handler : List of created PantheonPath objects
+deactivate Workspace
+
+== Phase 3: Scaffold GET Process ==
+
+Handler -> Handler : _build_scaffold_get(build_context)
+
+note over Handler : 1. Generate sections.jsonnet including context section first\n2. Create enhanced locator.jsonnet with [ACRONYM{artifact_id}]_ pattern\n3. Generate parser.jsonnet to extract [ACRONYM##] ID format\n4. Extract GET permissions from build-spec\n5. Persist human-friendly descriptions that power `pantheon get sections`
+
+Handler -> Workspace : scaffold_get_process(bundle_root, get_proc, sections_json, locator_jsonnet, parser_json, perms_get)
+activate Workspace
+
+Workspace -> FS : Write artifact/sections.jsonnet
+Workspace -> FS : Write artifact/locator.jsonnet
+Workspace -> FS : Write artifact/parser.jsonnet
+Workspace -> FS : Write permissions.jsonnet (optional)
+Workspace -> FS : Copy default routine.md
+
+FS --> Workspace : Files written successfully
+Workspace --> Handler : List of created PantheonPath objects
+deactivate Workspace
+
+== Phase 4: Scaffold Consolidated UPDATE Process ==
+
+Handler -> Handler : _build_scaffold_updates(build_context)
+
+note over Handler : Consolidated UPDATE emitted for both build modes.\nToggle pattern determines section rendering:\n• Modular mode: non-initial sections have _include_* = false (placeholders)\n• Complete mode: all sections have _include_* = true (full content)\nToggle values can be modified post-generation without regeneration.
+
+Handler -> Handler : generate_update_schema_jsonnet(section_names)
+note right of Handler : Creates consolidated schema.jsonnet:\n• Imports individual section schemas (each without $schema)\n• Defines section_order for iteration\n• Enables --sections parameter filtering
+
+Handler -> Handler : Build consolidated patch template
+note right of Handler : Creates Jinja2 template with section loop:\n{% set requested_sections = pantheon_sections if pantheon_sections else section_order %}\n{% for section_name in requested_sections %}\n  {% include "sections/" ~ section_name ~ ".md" %}\n{% endfor %}
+
+Handler -> Handler : Create import references
+note right of Handler : Generate import statements:\n• target_json = 'import "artifact-sections://get-<artifact>"'\n• locator_json = 'import "artifact-locator://get-<artifact>"'\n• parser_json = 'import "artifact-parser://get-<artifact>"'\n• target import resolves to descriptions consumed by `pantheon get sections`
+
+Handler -> Workspace : scaffold_update_process(bundle_root, "update-<artifact>", ...)
+activate Workspace
+
+Workspace -> FS : Write artifact/patch.md (consolidated template)
+Workspace -> FS : Write artifact/target.jsonnet (import)
+Workspace -> FS : Write artifact/locator.jsonnet (import)
+Workspace -> FS : Write artifact/parser.jsonnet (import)
+Workspace -> FS : Write schema.jsonnet (consolidated)
+Workspace -> FS : Write permissions.jsonnet (optional)
+Workspace -> FS : Copy default routine.md
+
+FS --> Workspace : Main process files written
+Workspace --> Handler : List of created PantheonPath objects
+deactivate Workspace
+
+note over Handler : Create individual section fragments
+
+loop For each section in section_names
+    Handler -> Workspace : save_artifact(section_template, "artifact/sections/<section>.md")
+    activate Workspace
+    Workspace -> FS : Write section template fragment
+    FS --> Workspace : Section fragment written
+    Workspace --> Handler : Fragment path
+    deactivate Workspace
+
+    Handler -> Workspace : save_artifact(section_schema, "artifact/sections/<section>.schema.jsonnet")
+    activate Workspace
+    Workspace -> FS : Write section schema fragment
+    FS --> Workspace : Schema fragment written
+    Workspace --> Handler : Schema path
+    deactivate Workspace
+end
+
+== Phase 5: Generate Summary and Return ==
+
+Handler -> Handler : Generate process summary
+
+note over Handler : Bundle staged under: {bundle_root}\nGenerated processes:\n- create-{artifact}\n- get-{artifact}\n- update-{artifact} (single consolidated process)\n\nConsolidated UPDATE benefits:\n• Eliminates combinatorial explosion\n• Supports --sections parameter filtering\n• Atomic multi-section updates\n• Section fragments for modularity
+
+Handler --> CLI : ProcessResult with success, output summary, and bundle_root
+deactivate Handler
+
+CLI --> Agent : Return success message and bundle location
+deactivate CLI
+
+@enduml

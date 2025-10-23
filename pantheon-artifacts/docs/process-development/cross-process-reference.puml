@@ -1,0 +1,133 @@
+@startuml
+/'
+@id: process-development-cross-process-reference
+@title: Cross-Process Reference Sequence (Import-Based)
+@description: Sequence diagram showing how one process can reuse another process's artifact locator via semantic URI imports with Workspace preprocessing
+@keywords: [diagram, sequence, cross-process, reference, import, semantic-uri, locator]
+@relevance: Use this diagram to understand cross-process artifact locator reuse via artifact-locator:// semantic URIs and transparent import preprocessing
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Cross-Process Reference Sequence (Import-Based)
+
+participant "ProcessHandler" as PH
+participant "Artifact Engine" as AE
+participant "Jsonnet Compiler" as JC
+participant "Pantheon Workspace" as PW
+participant "File System" as FS
+
+note over PH, FS
+    ProcessHandler calls find_artifact for update-plan process
+    update-plan reuses exact same locator as create-ticket via import
+    (Workspace now preprocesses all imports transparently)
+end note
+
+note over PW, FS
+    Pantheon Workspace -> FileSystem is a full qualified absolute path using pathlib.path
+    including <project_root>/pantheon-teams/<active-team>/ prefixed
+    (not shown in diagram)
+end note
+
+PH -> AE: find_artifact("update-plan", "T012")
+activate AE
+
+note over AE
+    Phase 1: Normalize the fuzzy ID
+end note
+
+AE -> AE: _normalize_id("update-plan", "T012")
+
+note over AE
+    Phase 2: Locate artifact using finder pattern
+end note
+
+AE -> AE: _locate_artifact("update-plan", "T012")
+
+AE -> PW: get_artifact_locator("update-plan")
+activate PW
+
+PW -> FS: read_text("/processes/update-plan/artifact/locator.jsonnet")
+activate FS
+FS --> PW: 'import "artifact-locator://create-ticket"'
+deactivate FS
+
+note over PW
+    Workspace preprocessing:
+    1. Uses regex to detect import statements
+    2. For semantic URIs, calls get_resolved_content()
+    3. get_resolved_content() parses URI and routes to appropriate method
+    4. Recursively processes all nested imports
+    5. Directly replaces import with processed content
+end note
+
+PW -> PW: _preprocess_content(raw_content, file_path, import_stack)
+
+PW -> PW: get_resolved_content("artifact-locator://create-ticket")
+
+note over PW
+    get_resolved_content() parses semantic URI:
+    • scheme: "artifact-locator"
+    • process_name: "create-ticket"
+    • Routes to get_artifact_locator("create-ticket")
+end note
+
+PW -> FS: read_text("/processes/create-ticket/artifact/locator.jsonnet")
+activate FS
+FS --> PW: '{ "pattern": "^({id})_.*\\.md$" }'
+deactivate FS
+
+PW -> PW: _preprocess_content(locator_content, locator_file_path, import_stack)
+
+note over PW
+    Preprocessing complete:
+    Import statement directly replaced with processed content
+    Single-pass content inlining
+end note
+
+PW --> AE: preprocessed locator content (fully resolved)
+deactivate PW
+
+note over AE
+    Compile preprocessed Jsonnet with canonical ID
+    as external variable for pattern injection
+    No import callbacks needed - content is pre-resolved
+end note
+
+AE -> JC: _compile_jsonnet(locator_content, {"pantheon_artifact_id": "T012"})
+activate JC
+JC --> AE: compiled locator JSON with pattern
+deactivate JC
+
+note over AE
+    Extract search pattern and directory (if any)
+    from compiled locator configuration
+end note
+
+AE -> PW: get_matching_artifact(pattern, directory=None)
+activate PW
+
+note over PW
+    Search artifacts_root for files matching
+    the compiled pattern with injected ID
+end note
+
+PW -> FS: search files matching pattern
+activate FS
+FS --> PW: matching files list
+deactivate FS
+
+PW --> AE: [PantheonPath("artifacts/T012_ticket.md")]
+deactivate PW
+
+AE --> PH: PantheonPath("artifacts/T012_ticket.md")
+deactivate AE
+
+note over PH
+    ProcessHandler receives the located artifact path.
+    Cross-process referencing handled via direct content inlining
+    in _preprocess_content() - ArtifactEngine works with
+    single preprocessed content string.
+end note
+
+@enduml

@@ -1,0 +1,62 @@
+@startuml
+/'
+@id: testing-e2e-test-architecture
+@title: E2E Test Architecture - Fixture-Based Isolation System
+@description: Sequence diagram showing how E2E tests use fixture-based isolation with test teams separate from production to ensure test stability
+@keywords: [diagram, sequence, e2e, testing, fixtures, isolation, robustness]
+@relevance: Use this diagram to understand the E2E test isolation architecture using test teams in fixtures directory with automatic cleanup and production independence
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title E2E Test Architecture - Fixture-Based Isolation System
+
+note right : E2E tests use fixture-based approach for complete isolation:\n• Test teams in tests/fixtures/teams/pantheon-e2e-test/\n• setup_test_project() fixture creates isolated structure\n• Production independence - no reliance on production teams\n• Automatic temporary directory management
+
+participant "E2E Test" as Test
+participant "setup_test_project()\nFixture" as Fixture
+participant "Test Teams\ntests/fixtures/teams/" as TestTeams
+participant "Production Teams\npantheon/_templates/" as ProdTeams
+participant "Temp Directory" as TempDir
+participant "Framework CLI" as CLI
+
+== Test Isolation Setup ==
+Test -> Fixture : @pytest.fixture
+note over Fixture : Fixture creates isolated test environment:\n• Independent of production team changes\n• No brittleness from team name changes\n• Works even with single production team
+
+Fixture -> TestTeams : Copy pantheon-e2e-test team
+note over TestTeams : Test team structure:\npantheon-e2e-test/\n├── team-profile.yaml\n├── agents/\n│   └── ticket-handler.md\n└── processes/\n    ├── create-ticket/\n    ├── get-ticket/\n    └── update-plan/
+
+TestTeams -> Fixture : Test team package
+note left of TestTeams : Test teams are NOT bundled\nin production builds
+
+== Temporary Project Creation ==
+Fixture -> TempDir : Create isolated temp directory
+note over TempDir : Each test gets fresh environment:\n• .pantheon_project file\n• pantheon-teams/ directory\n• Complete isolation from other tests
+
+Fixture -> TempDir : Initialize project structure
+TempDir -> Test : Isolated test environment
+
+== Production Separation ==
+note over ProdTeams : Production teams remain untouched:\n• E2E tests never depend on production\n• Changes to production don't break tests\n• Test teams provide stable interface
+
+ProdTeams -[#lightgray]-> TestTeams : No dependency
+note right : Tests are completely isolated\nfrom production team changes
+
+== Test Execution ==
+Test -> CLI : subprocess.run(['pantheon', 'execute', 'create-ticket'])
+note over CLI : CLI operates in temp directory:\n• Uses test team (pantheon-e2e-test)\n• Uses test agent (ticket-handler)\n• Complete black-box validation
+
+CLI -> TempDir : Read test team configuration
+CLI -> TempDir : Write artifacts to temp directory
+CLI -> Test : Process results
+
+== Cleanup ==
+Test -> Fixture : Test completion
+Fixture -> TempDir : Automatic cleanup
+note over TempDir : Temporary directories are\nautomatically cleaned up\nafter each test
+
+note right : Robustness ensures:\n• Tests work regardless of production changes\n• No dependency on specific team selection\n• Stable even with team additions/removals
+
+note right : See ./test-execution-flow.puml for complete test workflow\nSee ../framework-development/template-change-propagation.puml for template handling
+@enduml

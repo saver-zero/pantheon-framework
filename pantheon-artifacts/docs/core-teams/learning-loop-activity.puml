@@ -1,0 +1,64 @@
+@startuml
+/'
+@id: routine-system-learning-loop-activity
+@title: Learning Loop Activity Flow
+@description: Activity diagram showing the feedback-driven learning loop where user feedback is logged, analyzed during retrospectives, and the human operator implements improvements based on retro recommendations
+@keywords: [diagram, activity, learning-loop, feedback, retrospective, continuous-improvement]
+@relevance: Use this diagram to understand the complete learning loop workflow from feedback submission through process improvement implementation
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Learning Loop Activity Flow
+
+|User|
+start
+:Instructs main agent to\nlog feedback;
+
+|Main LLM Agent|
+:Receives instruction;
+:Call create-feedback-log;
+:Write structured feedback\nto central log;
+note right : Feedback logged with\ncontext, sentiment,\nclassification, and severity
+
+|User|
+:Continue working;
+
+|System|
+if (User requests retro?) then (yes)
+
+    |Retro Agent|
+    :Invoked for retrospective;
+    :Call create-retro-report;
+    :Retrieve all logged feedback;
+    :Analyze patterns and\nsynthesize insights;
+
+    if (Process improvements\nidentified?) then (yes)
+        :Generate retro report with:\n- Analysis summary\n- Categorized improvements\n- Specific recommendations;
+        note right : Report contains actionable\nrecommendations for:\n- Process routines\n- Artifact schemas\n- Artifact templates
+
+        |Human Operator|
+        :Review retro report;
+        :Select improvements\nto implement;
+        :Use appropriate agents to\nimplement improvements:\n- Update agents\n- Update schemas\n- Update templates\n- Update routines;
+        note right : Human operator uses:\n- pantheon-dev\n- routine-designer\n- main LLM agent\n\nMakes direct edits to:\n- routine.md\n- schema.jsonnet\n- content.md/patch.md
+
+        |System|
+        :Git commit created;
+        :Process improved;
+        note right : The team has learned\nand evolved based on\nuser feedback
+
+    else (no)
+        :Retro report indicates\nno action needed;
+    endif
+
+else (no)
+    :Wait for next invocation;
+endif
+
+|System|
+:Process continues with\nimproved team behavior;
+
+end
+
+@enduml

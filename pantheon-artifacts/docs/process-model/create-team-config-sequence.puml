@@ -1,0 +1,183 @@
+@startuml
+/'
+@id: process-model-create-team-config-sequence
+@title: Create Team Config with Data-Driven Documentation
+@description: CREATE process for team-profile.yaml generation with documentation derived from input data property definitions and YAML filtering.
+@keywords: [diagram, sequence, process-model, CREATE, team-config, team-profile, property-definitions, data-driven-documentation, YAML-generation]
+@relevance: Use this diagram to understand team configuration creation with self-documenting YAML output generated from property definitions, including smart to_yaml filter processing.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Create Team Config with Data-Driven Documentation
+
+participant "Agent" as A
+participant "CLI" as CLI
+participant "ProcessHandler" as PH
+participant "Workspace" as WS
+participant "ArtifactEngine" as AE
+participant "FileSystem" as FS
+
+note over A, FS
+  Process: create-team-config
+  Goal: Generate team-profile.yaml with documentation derived from input data.
+end note
+
+== Input Collection ==
+A -> CLI: pantheon execute create-team-config
+
+note right of A
+  input.json contains the full design,
+  including property definitions.
+  {
+    "team_name": "Mobile Dev Team",
+    "team_description": "Mobile app development...",
+    "active_profile": "development",
+    "property_definitions": {
+      "verbosity": {
+        "type": "string",
+        "description": "Level of detail in artifacts",
+        "enum": ["brief", "standard", "detailed"]
+      },
+      "enforce_tdd": {
+        "type": "boolean",
+        "description": "Whether to enforce TDD practices"
+      }
+    },
+    "profiles": {
+      "development": {
+        "verbosity": "detailed",
+        "enforce_tdd": false
+      }
+    }
+  }
+end note
+
+CLI -> PH: execute(ProcessInput)
+
+== Parameter Enhancement & Validation ==
+PH -> PH: _build_enhanced_parameters()
+note over PH
+  Enhanced parameters include user data and
+  built-in variables like pantheon_actor.
+  The `pantheon_schema` variable is no longer
+  used for generating documentation.
+end note
+
+PH -> WS: get_process_schema("create-team-config")
+WS -> FS: read_file("processes/create-team-config/schema.jsonnet")
+FS --> WS: jsonnet schema content
+
+note right of WS
+  The schema now validates the structure
+  of `property_definitions`, ensuring, for example,
+  that string properties have enums.
+end note
+
+PH -> PH: validate_parameters(input_data, schema)
+PH --> PH: Validation OK
+
+== Template Loading ==
+PH -> WS: get_artifact_content_template("create-team-config")
+WS -> FS: read_file("processes/create-team-config/artifact/content.md")
+FS --> WS: template content: "{{ data | to_yaml }}"
+
+PH -> WS: get_artifact_directory_template("create-team-config")
+WS -> FS: read_file("processes/create-team-config/artifact/placement.jinja")
+FS --> WS: "team-configs"
+
+PH -> WS: get_artifact_filename_template("create-team-config")
+WS -> FS: read_file("processes/create-team-config/artifact/naming.jinja")
+FS --> WS: "{{ data.team_name | lower | replace(' ', '-') }}-profile.yaml"
+
+== Artifact Generation ==
+PH -> AE: generate_artifact(templates, enhanced_parameters)
+
+note over AE
+  The `enhanced_parameters` contain the full
+  user input object under the `data` key.
+end note
+
+AE -> AE: _create_template_context(enhanced_parameters)
+
+note over AE
+  Template context includes:
+  - data: (the full input.json content)
+  - pantheon_actor: "profile-designer"
+  - pantheon_timestamp: current time
+end note
+
+AE -> AE: _render_template(content_template, context)
+
+note over AE
+  Template: {{ data | to_yaml }}
+
+  The to_yaml filter is now smarter:
+  1. Gets the `data` object from the context.
+  2. Checks for a `property_definitions` key within `data`.
+  3. If found, uses it to generate the documentation header.
+  4. Dumps the rest of the `data` to YAML, excluding the `property_definitions` key itself.
+end note
+
+AE -> AE: _extract_properties_from_data(data.property_definitions)
+
+note right of AE
+  Extracts properties directly from the
+  `data.property_definitions` object.
+
+  Found: verbosity, enforce_tdd
+end note
+
+AE -> AE: _generate_documentation_header(extracted_props)
+
+note over AE
+  Creates documentation header:
+
+  # Profile Properties Documentation:
+  #
+  # verbosity:
+  #   Description: Level of detail in artifacts
+  #   Type: string
+  #   Options: brief, standard, detailed
+  #
+  # enforce_tdd:
+  #   Description: Whether to enforce TDD practices
+  #   Type: boolean (true/false)
+end note
+
+AE -> AE: yaml.dump(data, excluding: "property_definitions")
+
+note over AE
+  The final rendered content combines the
+  header with a clean YAML body.
+end note
+
+AE --> PH: (rendered_content, PantheonPath("team-configs/mobile-dev-team-profile.yaml"))
+
+note right of AE
+  Generated YAML is self-documenting,
+  but does not contain the `property_definitions` key.
+
+  # Profile Properties Documentation:
+  # [complete field descriptions]
+
+  team_name: Mobile Dev Team
+  team_description: Mobile app development...
+  active_profile: development
+  profiles:
+    development:
+      verbosity: detailed
+      enforce_tdd: false
+end note
+
+== Artifact Saving ==
+PH -> WS: save_artifact(rendered_content, relative_path)
+WS -> FS: write_file(absolute_path, rendered_content)
+FS --> WS: success
+WS --> PH: saved_path
+
+== Response ==
+PH --> CLI: ProcessResult{success: true, output: "Artifact created..."}
+CLI --> A: Team profile created successfully.
+
+@enduml

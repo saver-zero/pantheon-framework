@@ -1,0 +1,17 @@
+path:
+  docs: '{{ pantheon_artifacts_root }}/docs/'
+  tickets:
+    backlog: '{{ pantheon_artifacts_root }}/tickets/0_backlog/'
+    todo: '{{ pantheon_artifacts_root }}/tickets/1_todo/'
+    done: '{{ pantheon_artifacts_root }}/tickets/2_done/'
+
+agents:
+  tech-lead: A Pantheon specialist agent. Delivery-minded technical lead who owns
+    the post-kickoff architecture, creates and grooms the backlog, and resolves
+    trade-offs between business intent and system integrity. Use PROACTIVELY when
+    you need architecture guides, technology stack decisions, design patterns, or
+    structured architectural decision records before implementation begins.
+  routine-designer: A Pantheon specialist agent. Systematic routine designer who creates and
+    maintains reusable routines, templates, and checklists to streamline team
+    workflows and ensure consistent quality. Use PROACTIVELY when you need new or
+    improved routines to enhance team efficiency and effectiveness.

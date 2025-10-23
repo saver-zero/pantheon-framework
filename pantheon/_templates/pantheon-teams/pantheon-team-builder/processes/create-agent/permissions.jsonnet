@@ -1,0 +1,6 @@
+{
+  "allow": [
+    "agent-designer"
+  ],
+  "deny": []
+}

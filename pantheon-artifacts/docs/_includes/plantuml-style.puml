@@ -1,0 +1,86 @@
+@startuml
+/'
+Shared PlantUML Style Configuration
+This file defines consistent visual styling for all Pantheon Framework diagrams.
+Import this file in all .puml diagrams with: !include ../_includes/plantuml-style.puml
+'/
+
+skinparam {
+  ' General settings
+  BackgroundColor transparent
+  Shadowing false
+  RoundCorner 10
+
+  ' Fonts
+  DefaultFontName Arial
+  DefaultFontSize 12
+  DefaultFontColor #333333
+
+  ' Components
+  ComponentBackgroundColor #E3F2FD
+  ComponentBorderColor #1976D2
+  ComponentBorderThickness 2
+  ComponentFontSize 13
+  ComponentFontStyle bold
+
+  ' Actors/Participants
+  ActorBackgroundColor #FFF3E0
+  ActorBorderColor #F57C00
+  ActorBorderThickness 2
+
+  ' Sequences
+  SequenceArrowColor #1976D2
+  SequenceArrowThickness 2
+  SequenceLifeLineBorderColor #1976D2
+  SequenceLifeLineBorderThickness 2
+  SequenceParticipantBackgroundColor #E8F5E9
+  SequenceParticipantBorderColor #388E3C
+  SequenceParticipantBorderThickness 2
+
+  ' Notes
+  NoteBackgroundColor #FFFDE7
+  NoteBorderColor #F9A825
+  NoteBorderThickness 1
+  NoteFontSize 11
+
+  ' Packages/Containers
+  PackageBackgroundColor #F3E5F5
+  PackageBorderColor #7B1FA2
+  PackageBorderThickness 2
+  PackageFontSize 14
+  PackageFontStyle bold
+
+  ' Activities
+  ActivityBackgroundColor #E1F5FE
+  ActivityBorderColor #0288D1
+  ActivityBorderThickness 2
+  ActivityStartColor #4CAF50
+  ActivityEndColor #F44336
+  ActivityBarColor #1976D2
+
+  ' Classes
+  ClassBackgroundColor #FFF9C4
+  ClassBorderColor #F9A825
+  ClassBorderThickness 2
+  ClassFontSize 12
+
+  ' Arrows
+  ArrowColor #1976D2
+  ArrowThickness 2
+
+  ' Legend
+  LegendBackgroundColor #FAFAFA
+  LegendBorderColor #BDBDBD
+  LegendBorderThickness 1
+}
+
+' Custom colors for Pantheon Framework concepts
+!define PANTHEON_PRIMARY #1976D2
+!define PANTHEON_SECONDARY #388E3C
+!define PANTHEON_ACCENT #F57C00
+!define PANTHEON_HIGHLIGHT #7B1FA2
+!define PANTHEON_SUCCESS #4CAF50
+!define PANTHEON_ERROR #F44336
+!define PANTHEON_WARNING #F9A825
+
+@enduml

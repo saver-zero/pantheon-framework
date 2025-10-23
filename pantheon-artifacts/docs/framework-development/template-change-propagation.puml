@@ -1,0 +1,80 @@
+@startuml
+/'
+@id: framework-development-template-change-propagation
+@title: Template Change Propagation - Development vs Test Templates
+@description: Sequence diagram showing how production template changes require pantheon init to propagate while test fixture changes are picked up automatically
+@keywords: [diagram, sequence, templates, propagation, development, testing, bundling, framework-contributor, maintainer]
+@relevance: Use this diagram to understand the different propagation mechanisms for production templates (copy-based) versus test fixtures (direct access)
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Template Change Propagation - Development vs Test Templates
+
+note right : Template change handling in development:\n• Production templates require pantheon init to propagate\n• Test fixtures picked up automatically by E2E tests\n• Different propagation mechanisms for different use cases
+
+participant "Developer" as Dev
+participant "Production Templates\npantheon/_templates/" as ProdTemplates
+participant "Test Fixtures\ntests/fixtures/" as TestFixtures
+participant "Project Directory" as ProjectDir
+participant "E2E Tests" as E2E
+participant "Framework CLI" as CLI
+
+== Production Template Development ==
+Dev -> ProdTemplates : Modify pantheon/_templates/pantheon-team-builder/
+note over ProdTemplates : Production team templates:\n• pantheon-team-builder/ (framework development)\n• Bundled in wheel distribution\n• Used by pantheon init command
+
+ProdTemplates -> Dev : Templates updated
+note right of ProdTemplates : Template changes are static:\n• Not dynamically loaded\n• Copied during initialization\n• Require manual propagation
+
+== Production Template Propagation ==
+Dev -> ProjectDir : cd test-project
+Dev -> CLI : pantheon init
+note over CLI : Re-initialization picks up changes:\n• Copies updated templates\n• Overwrites team package structure\n• Does not overwrite existing artifacts
+
+CLI -> ProdTemplates : Read updated templates
+ProdTemplates -> CLI : Current template content
+CLI -> ProjectDir : Copy updated team packages
+note over ProjectDir : Fresh team packages:\n• pantheon-teams/ updated\n• Existing artifacts preserved\n• New processes/agents available
+
+== Alternative: Fresh Project ==
+Dev -> Dev : rm -rf test-project && mkdir test-project
+Dev -> CLI : cd test-project && pantheon init
+CLI -> ProdTemplates : Read templates
+CLI -> ProjectDir : Create fresh project with latest templates
+
+== Test Fixture Development ==
+Dev -> TestFixtures : Modify tests/fixtures/teams/pantheon-e2e-test/
+note over TestFixtures : Test team templates:\n• pantheon-e2e-test/ for E2E testing\n• NOT bundled in production\n• Used directly by test fixtures
+
+TestFixtures -> Dev : Test templates updated
+note right of TestFixtures : Test fixture changes are immediate:\n• No propagation step required\n• Picked up automatically\n• Direct file system access
+
+== Test Fixture Propagation ==
+Dev -> E2E : pytest tests/e2e/
+E2E -> TestFixtures : Read fixtures directly
+note over E2E : Automatic pickup:\n• setup_test_project() fixture\n• Direct file system access\n• No initialization required
+
+TestFixtures -> E2E : Current fixture content
+E2E -> E2E : Create test environment with latest fixtures
+E2E -> Dev : Test results with updated fixtures
+
+== Bundle vs Direct Access ==
+
+note over ProdTemplates : **Production Templates (Bundled)**:\n• Static at installation time\n• Require pantheon init for updates\n• Bundled in wheel via pyproject.toml\n• Package data configuration
+
+note over TestFixtures : **Test Fixtures (Direct)**:\n• Dynamic file system access\n• Immediate change pickup\n• Never bundled in production\n• Development-time only
+
+== Template Change Workflow ==
+
+=== For Production Templates ===
+note over Dev : 1. Edit pantheon/_templates/pantheon-team-builder/\n2. cd test-project\n3. pantheon init (re-run)\n4. Verify changes in pantheon-teams/
+
+=== For Test Fixtures ===
+note over Dev : 1. Edit tests/fixtures/teams/pantheon-e2e-test/\n2. pytest tests/e2e/ (run tests)\n3. Changes picked up automatically\n4. No initialization required
+
+== Key Differences ==
+note over Dev : **Production**: Copy-based, requires init\n**Test**: Direct access, automatic pickup\n**Isolation**: Complete separation ensures test stability
+
+note right : Previous: See ./development-environment-setup.puml for setup\nNext: See ../team-packages/package-bundling.puml for build-time inclusion
+@enduml

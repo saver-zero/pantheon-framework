@@ -1,0 +1,54 @@
+@startuml
+/'
+@id: testing-testing-pyramid
+@title: Pantheon Framework Testing Strategy - Three-Tier Pyramid
+@description: Overview diagram showing the three-tier testing pyramid with unit, integration, and end-to-end tests with counts and characteristics
+@keywords: [diagram, sequence, testing, pyramid, unit, integration, e2e, quality-gates]
+@relevance: Use this diagram to understand the overall testing strategy and the three-tier pyramid approach with isolation levels and execution speeds
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Pantheon Framework Testing Strategy - Three-Tier Pyramid
+
+note right : Testing pyramid showing the three-tier strategy:\n• Unit Tests: Fast, isolated components with mocks (489 tests)\n• Integration Tests: Component interactions with real objects (23 tests)\n• End-to-End Tests: Complete workflows via CLI subprocess (25 tests)
+
+participant "Developer" as Dev
+participant "Unit Tests\n(tests/unit/)" as Unit
+participant "Integration Tests\n(tests/integration/)" as Integration
+participant "End-to-End Tests\n(tests/e2e/)" as E2E
+participant "Framework CLI" as CLI
+
+== Unit Testing Layer ==
+Dev -> Unit : pytest tests/unit/
+note over Unit : • 489 tests\n• Fast execution\n• Components in isolation\n• Mock FileSystem objects\n• No installation required
+
+Unit -> Unit : Mock FileSystem
+note right of Unit : Tests use dependency injection:\n• Mock all I/O operations\n• Test business logic only\n• Arrange-Act-Assert pattern
+
+Unit -> Dev : Results (fast)
+
+== Integration Testing Layer ==
+Dev -> Integration : pytest tests/integration/
+note over Integration : • 23 tests\n• Moderate speed\n• Component interactions\n• Real objects, no mocks\n• No installation required
+
+Integration -> Integration : Real FileSystem
+note right of Integration : Tests use real objects:\n• Workspace + ArtifactEngine interactions\n• Actual file operations\n• Component boundary testing
+
+Integration -> Dev : Results (moderate)
+
+== End-to-End Testing Layer ==
+Dev -> E2E : pip install -e .
+note over E2E : E2E tests require framework installation:\n• CLI must be available in PATH\n• Tests use subprocess calls\n• Complete black-box validation
+
+E2E -> CLI : subprocess.run(['pantheon', 'init'])
+note over CLI : • 25 tests\n• Slow execution\n• Complete workflows\n• Fixture-based approach\n• Production independence
+
+CLI -> E2E : Real CLI responses
+E2E -> Dev : Results (comprehensive)
+
+== Quality Gates ==
+note over Dev : Pre-release requirements:\n• All 489 unit tests pass\n• All 23 integration tests pass\n• All 25 E2E tests pass\n• Code coverage ≥ 85%
+
+note right : See ../framework-development/build-and-release-workflow.puml for complete release process
+@enduml

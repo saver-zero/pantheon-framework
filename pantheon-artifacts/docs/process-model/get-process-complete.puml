@@ -1,0 +1,278 @@
+@startuml
+/'
+@id: process-model-get-process-complete
+@title: Complete RETRIEVE Process Flow
+@description: End-to-end RETRIEVE process sequence from CLI invocation through artifact discovery, section parsing, and JSON response with placeholder detection.
+@keywords: [diagram, sequence, process-model, RETRIEVE, GET, complete-flow, singleton-mode, multi-section, placeholder-detection]
+@relevance: Use this diagram for the complete RETRIEVE workflow including single-section vs multi-section modes, placeholder filtering, and JSON response formatting.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Complete Artifact Retrieval Sequence - RETRIEVE Process (Full Flow)
+
+note right over
+This is the complete, detailed sequence diagram showing the entire RETRIEVE process flow.
+For focused views, see the modular diagrams:
+* ../02-initialization/framework-init.puml - Framework initialization & dependency injection
+* ../03-core-flows/command-processing.puml - Command validation & parsing
+* ../03-core-flows/operation-detection.puml - Process type detection & schema validation
+* get-process-core.puml - Core artifact retrieval logic
+end note
+
+participant "AI Agent" as Agent
+participant "CLI\n(Presentation Layer)" as CLI
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "Artifact Engine\n(Service Layer - Utilities)" as ArtifactEngine
+participant "FileSystem\n(I/O Adapter)" as FS
+
+== Project Discovery & Active Team Resolution ==
+== Architectural Pattern: Dependency Inversion Principle ==
+
+note over CLI
+CLI initialization discovers project and loads active team
+
+This "roundabout" approach implements Dependency Injection:
+* FileSystem abstraction enables testability\n* Workspace provides facade over complex file operations
+* Prevents direct filesystem coupling in business logic
+end note
+
+CLI -> Workspace : discover_project_root(filesystem, ".")
+activate Workspace
+Workspace -> FS : exists(.pantheon_project marker)
+FS --> Workspace : project_root path
+Workspace --> CLI : project_root discovered
+deactivate Workspace
+
+CLI -> Workspace : load_project_config(filesystem, project_root)
+activate Workspace
+Workspace -> FS : read_text(.pantheon_project)
+FS --> Workspace : YAML config content
+Workspace -> Workspace : Parse YAML:\nactive_team: <team_name>\nartifacts_root: pantheon-artifacts
+Workspace --> CLI : ProjectConfig{active_team, artifacts_root}
+deactivate Workspace
+
+note over CLI : Create workspace with discovered configuration\nDependency Injection: FileSystem injected for testability
+CLI -> Workspace : PantheonWorkspace(project_root, artifacts_root, filesystem)
+activate Workspace
+Workspace -> Workspace : Store active_team from config for all operations
+note right of Workspace : All subsequent operations use:\npantheon-teams/<active_team>/ as base path\n\nArchitectural Benefit:\n* In production: real FileSystem\n* In tests: mock FileSystem\n* Business logic testable without disk I/O
+
+== Command Processing Phase ==
+
+note over Workspace, FS
+All file paths from this point forward include active team context:
+pantheon-teams/<active_team>/processes/<process_name>/(active_team resolved from .pantheon_project)
+Why Not Direct File Access?
+* Separation of Concerns: Business logic vs I/O operations
+* Testability: Mock FileSystem for fast unit tests
+* Security: Workspace enforces sandboxing boundaries
+* Convention Over Configuration: Workspace encapsulates all path logic
+end note
+
+Agent -> CLI : pantheon execute get-ticket\n--actor <agent_name>\n--ticket " T012.md "\n--sections plan
+activate CLI
+
+note over CLI : Unified execute model:\nSame command for both\nRead and Write processes
+
+CLI -> CLI : validate_actor()\nVerify actor name is non-empty
+
+note right of CLI : Actor validation only checks\nthat the name is non-empty.\nAccess control is enforced\nthrough permissions.jsonnet.
+
+CLI -> Workspace : get_permissions()
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/permissions.jsonnet)
+FS --> Workspace : Permission rules
+Workspace --> CLI : Permission rules
+deactivate Workspace
+CLI -> CLI : Check permissions for get-ticket
+note right over
+Exit code 13 if denied
+Exit code 1 if invalid actor
+end note
+
+CLI -> CLI : Parse arguments into input_data:\n{"ticket": " T012.md ", "sections": "plan"}
+
+CLI -> Handler : execute(process_name="get-ticket",\ninput_data={"ticket": " T012.md ", "sections": "plan"})
+activate Handler
+
+note over Handler : ProcessHandler parses reserved parameters:\n"sections": "plan" → "sections": ["plan"]
+
+== Redirect Check Phase ==
+
+Handler -> Workspace : has_process_redirect("get-ticket")
+activate Workspace
+Workspace -> FS : exists(pantheon-teams/<active_team>/processes/get-ticket/redirect.md)
+FS --> Workspace : false
+Workspace --> Handler : false (no redirect)
+deactivate Workspace
+
+== Enhanced Parameters Building Phase ==
+
+Handler -> Handler : _build_enhanced_parameters(input_data)
+note right over
+Adds built-in variables:
+pantheon_actor, pantheon_timestamp,
+pantheon_datestamp, pantheon_process
+end note
+
+== Operation Type Detection Phase ==
+
+note over Handler : ProcessHandler uses determine_process_type():\n1. Try get_artifact_content_template() for content.md\n2. If not found, try get_artifact_patch_template() for patch.md\n3. Based on results, determine operation type
+
+Handler -> Handler : determine_process_type("get-ticket")
+activate Handler
+Handler -> Workspace : get_artifact_content_template("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/content.md)
+activate FS
+FS --> Workspace : FileNotFoundError (no content.md)
+deactivate FS
+Workspace --> Handler : FileNotFoundError
+deactivate Workspace
+
+Handler -> Workspace : get_artifact_patch_template("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/patch.md)
+activate FS
+FS --> Workspace : FileNotFoundError (no patch.md)
+deactivate FS
+Workspace --> Handler : FileNotFoundError
+deactivate Workspace
+
+Handler -> Handler : Operation Detection Logic:\n- No content.md ✗\n- No patch.md ✗\n→ ProcessType.RETRIEVE
+deactivate Handler
+
+note over Handler : RETRIEVE operation detected:\nNeeds locator + parser + sections for artifact finding
+
+== Schema Validation Phase ==
+
+Handler -> Workspace : get_process_schema("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/schema.jsonnet)
+FS --> Workspace : Schema content
+Workspace --> Handler : Schema content
+deactivate Workspace
+
+Handler -> Artifact : compile_schema(schema_content, profile_content)
+activate Artifact
+Artifact --> Handler : Composed JSON Schema
+deactivate Artifact
+
+Handler -> Artifact : validate(input_data, schema)
+activate Artifact
+Artifact --> Handler : Validation success
+deactivate Artifact
+
+== Artifact Retrieval Phase (RETRIEVE Operation) ==
+
+note over Handler : RETRIEVE workflow:\n1. Use ArtifactEngine to find and parse artifact\n2. Return JSON result (no file creation)
+
+Handler -> Handler : execute_get_process(enhanced_parameters)
+activate Handler
+
+Handler -> ArtifactEngine : find_artifact("get-ticket", " T012.md ")
+activate ArtifactEngine
+
+note over ArtifactEngine : Location Methods Exception:\nArtifactEngine orchestrates complex queries\nfor artifact finding/parsing while maintaining\npure computation for generation methods.\nThis follows High Cohesion over Universal Purity.
+
+note over ArtifactEngine : Phase 1: normalize_id using parser.jsonnet\nfrom pantheon-teams/<active_team>/processes/get-ticket/
+
+ArtifactEngine -> ArtifactEngine : _normalize_id("get-ticket", " T012.md ")
+activate ArtifactEngine
+ArtifactEngine -> Workspace : get_artifact_parser("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/parser.jsonnet)
+FS --> Workspace : Parser rules (ID normalization)
+Workspace --> ArtifactEngine : Parser rules
+deactivate Workspace
+
+ArtifactEngine -> ArtifactEngine : Apply transformations:\n1. Strip whitespace: "T012.md"\n2. Extract basename: "T012.md"\n3. Normalize ID: "T012"
+deactivate ArtifactEngine
+
+note over ArtifactEngine : Phase 2: locate_artifact using locator.jsonnet\nfrom pantheon-teams/<active_team>/processes/get-ticket/
+
+ArtifactEngine -> ArtifactEngine : _locate_artifact("get-ticket", "T012")
+activate ArtifactEngine
+ArtifactEngine -> Workspace : get_artifact_locator("get-ticket")
+activate Workspace
+Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/locator.jsonnet)
+FS --> Workspace : Locator config (artifact finding patterns)
+Workspace --> ArtifactEngine : {"directory": "tickets", "pattern": "^[A-Z]\\d{3}_.*\\.md$"}
+deactivate Workspace
+
+ArtifactEngine -> ArtifactEngine : Extract directory: "tickets"
+ArtifactEngine -> ArtifactEngine : Use regex pattern to filter files
+
+ArtifactEngine -> Workspace : get_matching_artifact(pattern, directory)
+activate Workspace
+Workspace -> Workspace : compile regex pattern
+Workspace -> FS : exists(artifacts_root/tickets)
+FS --> Workspace : true
+Workspace -> FS : iterdir(artifacts_root/tickets) - recursive search
+FS --> Workspace : Found: T012_refactor-init.md
+Workspace --> ArtifactEngine : [PantheonPath("tickets/T012_refactor-init.md")]
+deactivate Workspace
+
+ArtifactEngine --> ArtifactEngine : Return artifact path
+deactivate ArtifactEngine
+ArtifactEngine --> Handler : Return artifact path
+deactivate ArtifactEngine
+
+alt sections.jsonnet exists (multi-section)
+    Handler -> Workspace : get_artifact_sections_config("get-ticket")
+    activate Workspace
+    Workspace -> FS : read_text(pantheon-teams/<active_team>/processes/get-ticket/artifact/sections.jsonnet)
+    FS --> Workspace : Section markers (defines section boundaries)
+    Workspace --> Handler : Section marker definitions
+    deactivate Workspace
+
+    Handler -> ArtifactEngine : get_artifact_sections(path, ["plan"], section_markers)
+else sections.jsonnet missing (single-section)
+    note over Handler : Single-section mode: No sections.jsonnet file\nReturn entire content instead of section parsing
+
+    Handler -> ArtifactEngine : get_entire_artifact_content(path)
+end
+activate ArtifactEngine
+
+ArtifactEngine -> Workspace : read_file(artifact_path)
+activate Workspace
+Workspace -> FS : read_text(artifact_path)
+FS --> Workspace : File content
+Workspace --> ArtifactEngine : File content
+deactivate Workspace
+
+alt multi-section path
+    ArtifactEngine -> ArtifactEngine : Parse sections:\n- Find START:PLAN\n- Extract content\n- Check PLACEHOLDER\n- Find END:PLAN
+
+    note right : Placeholder Detection:\nFramework filters sections containing placeholder markers\n- _extract_multiple_sections: Skip individual placeholder sections\n- _extract_single_section: Skip if placeholder marker present\n- _extract_no_sections: Skip if document contains placeholder\nEnsures GET processes return only actual content
+
+    ArtifactEngine --> Handler : Return plan section content
+else single-section path
+    ArtifactEngine -> ArtifactEngine : Return entire content without parsing
+
+    ArtifactEngine --> Handler : Return full document content
+end
+deactivate ArtifactEngine
+
+== Return Phase (Read Process) ==
+
+alt multi-section response
+    Handler -> Handler : Format result as JSON:\n{"sections": {"plan": "..."}}
+else single-section response
+    Handler -> Handler : Format result as JSON:\n{"content": "entire document content"}
+end
+deactivate Handler
+
+Handler --> CLI : Return JSON result\n(not a file path)
+deactivate Handler
+
+CLI -> CLI : Output JSON to stdout
+
+CLI --> Agent : Plan content for T012\n(as JSON)
+deactivate CLI
+
+note right of Handler : Efficient Operation Detection:\nProcessHandler.determine_process_type() uses 2 calls:\n1. get_artifact_content_template() → content.md?\n2. get_artifact_patch_template() → patch.md?\n\nActive Team Resolution:\n- .pantheon_project contains: active_team: <team_name>\n- All process files resolved from: pantheon-teams/<active_team>/\n- Workspace provides single source of truth for team context\n\nRETRIEVE Result:\n- No content.md ✗\n- No patch.md ✗ \n→ Call execute_get_process() with enhanced_parameters\n→ Use ArtifactEngine internal methods for finding
+
+@enduml

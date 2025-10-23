@@ -1,0 +1,145 @@
+@startuml
+/'
+@id: process-model-update-process-sections-uri
+@title: Consolidated UPDATE Process Sections URI Resolution
+@description: Semantic URI resolution for consolidated UPDATE processes showing import-based target.jsonnet referencing GET process sections with multi-section atomic processing.
+@keywords: [diagram, sequence, process-model, UPDATE, consolidated, semantic-URI, artifact-sections-uri, import-resolution, multi-section, atomic-processing]
+@relevance: Use this diagram to understand how consolidated UPDATE processes use semantic URIs to import section markers from GET processes, enabling DRY principle and multi-section atomic updates.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Consolidated UPDATE Process - Sections URI Resolution Sequence
+
+note right over
+This diagram shows semantic URI resolution for consolidated UPDATE processes:
+    * Single update-<artifact> process handling multiple sections
+    * Import-based target.jsonnet referencing GET process sections
+    * Multi-section atomic processing with URI resolution
+    * Section-specific template fragment inclusion
+
+Prerequisites: See ../02-initialization/framework-init.puml for active team resolution
+Context: See ../03-core-flows/operation-detection.puml for UPDATE process setup
+Related: See build-process-scaffold-update.puml for consolidated process creation
+end note
+
+participant "AI Agent" as Agent
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as PH
+participant "Pantheon Workspace\n(Service Layer - Facade)" as PW
+participant "Artifact Engine\n(Service Layer - Utilities)" as AE
+participant "FileSystem\n(I/O Adapter)" as FS
+
+note over Agent, FS : Agent executes: pantheon execute update-artifact --id T001 --sections plan,strategy --from-file input.json\nThe consolidated update-artifact process uses import-based target.jsonnet with multi-section support
+
+note over PW, FS : All file paths include active team context:\npantheon-teams/<active_team>/processes/<process_name>/\n(active_team resolved during initialization - see ../02-initialization/framework-init.puml)\n\nSee ../01-architecture/container-view.puml for architectural patterns
+
+Agent -> PH: execute("update-artifact", input_data)
+activate PH
+
+note over PH : Consolidated UPDATE process determines sections to update:\n• Extract pantheon_sections = ["plan", "strategy"]\n• Load consolidated target.jsonnet with imports\n• Process each section atomically
+
+== Load Consolidated Target Configuration ==
+
+PH -> PW: get_artifact_target_section("update-artifact")
+activate PW
+
+PW -> FS: read_text(pantheon-teams/<active_team>/processes/update-artifact/artifact/target.jsonnet)
+activate FS
+FS --> PW: 'import "artifact-sections://get-artifact"'
+deactivate FS
+
+note over PW : Workspace preprocessing detects import:\n1. Parse content line by line\n2. Find import statement with semantic URI\n3. Extract semantic URI with parameters
+
+PW -> PW: get_resolved_content(raw_content)
+activate PW
+PW -> PW: _parse_semantic_uri("artifact-sections://get-artifact")
+
+note over PW : Parse semantic URI (no data parameter):\n- scheme: "artifact-sections"\n- process_name: "get-artifact"\n- parameters: {} (empty)\n\nRoute to: get_artifact_sections()
+
+PW -> PW: Route to get_artifact_sections("get-artifact", None)
+deactivate PW
+
+== Resolve Consolidated Artifact Sections URI ==
+
+PW -> PW: get_artifact_sections("get-artifact", None)
+activate PW
+
+PW -> PW: get_artifact_section_markers("get-artifact")
+activate PW
+PW -> FS: read_text(pantheon-teams/<active_team>/processes/get-artifact/artifact/sections.jsonnet)
+activate FS
+FS --> PW: consolidated sections configuration (Jsonnet)
+deactivate FS
+PW --> PW: Raw consolidated sections content
+deactivate PW
+
+note over PW : Consolidated sections.jsonnet contains all sections:\n{\n  "sections": {\n    "plan": {\n      "start": "<!-- SECTION:START:PLAN -->",\n      "end": "<!-- SECTION:END:PLAN -->"\n    },\n    "strategy": {\n      "start": "<!-- SECTION:START:STRATEGY -->",\n      "end": "<!-- SECTION:END:STRATEGY -->"\n    },\n    "artifacts": {\n      "start": "<!-- SECTION:START:ARTIFACTS -->",\n      "end": "<!-- SECTION:END:ARTIFACTS -->"\n    }\n  },\n  "placeholder": "<!-- SECTION:PLACEHOLDER -->"\n}
+
+note over PW : Since no data_path specified,\nreturn entire consolidated sections mapping
+
+PW -> AE: new ArtifactEngine(self)
+activate AE
+PW -> AE: resolve_uri_data(sections_content, None)
+activate AE
+
+note over AE : Full Sections Resolution:\n1. Compile Jsonnet content\n2. Return entire sections object\n3. ProcessHandler will extract specific sections\n4. Enables multi-section atomic processing
+
+AE -> AE: _compile_jsonnet(sections_content)
+AE -> AE: Return full compiled result
+
+AE --> PW: Complete sections mapping with all section markers
+deactivate AE
+
+PW -> PW: Convert to JSON string for return
+PW --> PW: JSON string with complete sections data
+deactivate PW
+
+note over PW : Workspace returns complete consolidated sections mapping\nas if they were the original target.jsonnet content\n\nTransparent URI resolution completed
+
+PW --> PH: consolidated section markers (complete mapping)
+deactivate PW
+
+== Multi-Section Atomic Processing ==
+
+note over PH : ProcessHandler receives consolidated section markers:\n{\n  "sections": {\n    "plan": {"start": "<!-- SECTION:START:PLAN -->", "end": "<!-- SECTION:END:PLAN -->"},\n    "strategy": {"start": "<!-- SECTION:START:STRATEGY -->", "end": "<!-- SECTION:END:STRATEGY -->"},\n    ...\n  }\n}\n\nProcesses requested sections: ["plan", "strategy"]
+
+loop for each section in ["plan", "strategy"]
+    note over PH : Process section atomically
+
+    PH -> PH: Extract section markers from consolidated mapping
+    note right of PH : Get markers for current section:\nplan: {"start": "<!-- SECTION:START:PLAN -->", "end": "<!-- SECTION:END:PLAN -->"}
+
+    PH -> PH: Render section-specific patch content
+    note right of PH : Create template context with:\n• pantheon_sections = [current_section]\n• section = current_section\n• Render consolidated patch.md template\n• Include only current section fragment
+
+    PH -> PH: _replace_section_content(artifact_content, start_marker, end_marker, patch_content)
+    note right of PH : Replace content between markers\nwith rendered section fragment
+end
+
+PH --> Agent: "Success: Artifact updated at /path/to/artifact"
+deactivate PH
+
+note over Agent
+Consolidated UPDATE process completed successfully!
+
+Key benefits of the new architecture:
+1. Single update-<artifact> process handles multiple sections
+2. --sections parameter enables selective updates
+3. Import-based target.jsonnet reuses GET process assets
+4. Atomic multi-section processing with rollback capability
+5. Section fragments enable modular template composition
+6. Eliminates combinatorial explosion (no per-section processes)
+
+The artifact-sections:// URI provided:
+• Cross-process section marker reuse (DRY principle)
+• Consolidated sections mapping for multi-section support
+• Transparent resolution without ProcessHandler complexity
+
+Related Diagrams:
+* build-process-scaffold-update.puml: How consolidated processes are created
+* update-process.puml: Complete consolidated UPDATE execution flow
+* ../02-initialization/framework-init.puml: Active team resolution setup
+* ../01-architecture/container-view.puml: Architectural patterns
+end note
+
+@enduml

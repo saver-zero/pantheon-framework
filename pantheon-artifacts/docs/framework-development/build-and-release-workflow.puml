@@ -1,0 +1,93 @@
+@startuml
+/'
+@id: framework-development-build-and-release-workflow
+@title: Build and Release Workflow - Complete Release Process
+@description: Sequence diagram showing the complete release process including quality gates, testing, build creation, and clean environment validation
+@keywords: [diagram, sequence, build, release, testing, quality-gates, packaging, framework-contributor, maintainer]
+@relevance: Use this diagram to understand the complete release workflow from pre-release checklist through quality gate validation and package distribution
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title Build and Release Workflow - Complete Release Process
+
+note right : Complete release process with quality gates:\n• Pre-release checklist ensures code quality\n• Build and package creation\n• Clean environment testing\n• Quality gate validation before release
+
+participant "Developer" as Dev
+participant "Code Quality" as Quality
+participant "Test Suite" as Tests
+participant "Build System" as Build
+participant "Clean Environment" as CleanEnv
+participant "Release Validation" as Validation
+
+== Pre-Release Checklist ==
+Dev -> Dev : pip install -e .
+note over Dev : Framework installation required:\n• Enables E2E tests to run\n• CLI must be available in PATH\n• Validates development setup
+
+== Code Quality Gates ==
+Dev -> Quality : ruff check --fix && ruff format
+Quality -> Dev : Linting and formatting complete
+note over Quality : Code style enforcement:\n• Auto-fix linting issues\n• Consistent code formatting\n• Zero linting errors required
+
+Dev -> Quality : mypy pantheon/
+Quality -> Dev : Type checking complete
+note over Quality : Type safety validation:\n• Static type analysis\n• Type hint compliance\n• No type errors allowed
+
+== Comprehensive Testing ==
+Dev -> Tests : pytest
+note over Tests : Complete test suite execution:\n• 489 unit tests (fast)\n• 23 integration tests (moderate)\n• 25 E2E tests (comprehensive)\n• Requires framework installation
+
+Tests -> Tests : Unit Tests (isolation)
+Tests -> Tests : Integration Tests (interactions)
+Tests -> Tests : E2E Tests (CLI subprocess)
+Tests -> Dev : All tests pass confirmation
+
+== Coverage Analysis ==
+Dev -> Tests : pytest --cov=pantheon --cov-report=term-missing
+Tests -> Dev : Coverage report
+note over Tests : Coverage requirements:\n• ≥ 85% code coverage\n• Missing line identification\n• Quality gate enforcement
+
+== Build and Package Creation ==
+Dev -> Build : python -m build
+note over Build : Package creation:\n• Cleans previous builds\n• Creates wheel distribution\n• Creates source distribution
+
+Build -> Build : rm -rf dist/ build/ *.egg-info/
+Build -> Build : Build wheel and sdist
+Build -> Dev : Packages created
+note right of Build : Artifacts created:\n• pantheon_framework-X.Y.Z-py3-none-any.whl\n• pantheon_framework-X.Y.Z.tar.gz
+
+== Clean Environment Testing ==
+Dev -> CleanEnv : python -m venv test-install-env
+CleanEnv -> CleanEnv : source test-install-env/bin/activate
+CleanEnv -> CleanEnv : pip install dist/pantheon_framework-*.whl
+
+CleanEnv -> CleanEnv : pantheon --help
+CleanEnv -> CleanEnv : mkdir test-project && cd test-project
+CleanEnv -> CleanEnv : pantheon init
+CleanEnv -> Dev : Clean installation verified
+
+note over CleanEnv : Clean environment validation:\n• Fresh virtual environment\n• Install from built wheel\n• Test basic CLI functionality\n• Verify template bundling works
+
+== Final E2E Validation ==
+CleanEnv -> Tests : pytest tests/e2e/ -v
+Tests -> CleanEnv : E2E tests pass in clean environment
+CleanEnv -> Dev : Final validation complete
+
+== Quality Gates Verification ==
+Dev -> Validation : Verify all gates passed
+note over Validation : ✅ All 489 unit tests pass\n✅ All 23 integration tests pass\n✅ All 25 E2E tests pass\n✅ Code coverage ≥ 85%\n✅ No linting errors\n✅ Type checking passes\n✅ Package builds successfully\n✅ Clean environment installation works\n✅ Bundled team packages accessible
+
+== Version Management ==
+Dev -> Dev : Update pyproject.toml version
+note over Dev : Version update:\n• Semantic versioning\n• Update [project] version field\n• Coordinate with release tags
+
+== Release Ready ==
+Validation -> Dev : Release criteria met
+note over Dev : Ready for release:\n• All quality gates passed\n• Package tested in clean environment\n• Template bundling verified\n• CLI functionality confirmed
+
+== Cleanup ==
+Dev -> CleanEnv : deactivate && rm -rf test-install-env test-project
+CleanEnv -> Dev : Cleanup complete
+
+note right : Previous: See ./template-change-propagation.puml for template handling\nSee ../team-packages/package-bundling.puml for detailed bundling process\nSee ../testing/testing-pyramid.puml for test strategy
+@enduml

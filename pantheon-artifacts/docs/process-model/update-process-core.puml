@@ -1,0 +1,149 @@
+@startuml
+/'
+@id: process-model-update-process-core
+@title: UPDATE Process Core Flow
+@description: Core UPDATE process execution with mode detection, singleton support, atomic section-by-section processing, and template rendering for content replacement.
+@keywords: [diagram, sequence, process-model, UPDATE, multi-section, single-section, singleton-mode, atomic-processing, section-replacement]
+@relevance: Use this diagram to understand UPDATE operations including mode detection via target.jsonnet, artifact finding with singleton support, and atomic section processing with rollback capability.
+'/
+
+!include ../_includes/plantuml-style.puml
+
+title UPDATE Process Core Flow
+
+note right over
+This diagram shows the core UPDATE process execution:
+    * Mode detection (single-section vs multi-section)
+    * Artifact finding with singleton mode support
+    * Atomic section-by-section processing
+    * Template rendering and content replacement
+
+Previous: See ../03-core-flows/operation-detection.puml for process setup
+Related: See update-process-singleton-mode.puml for mode detection details
+See ../02-initialization/framework-init.puml for active team resolution
+end note
+
+participant "ProcessHandler\n(Application Layer/Orchestrator)" as Handler
+participant "Pantheon Workspace\n(Service Layer - Facade)" as Workspace
+participant "Artifact Engine\n(Service Layer - Pure Computation)" as Artifact
+participant "FileSystem\n(I/O Adapter)" as FS
+
+note over Workspace, FS : All file paths include active team context:\npantheon-teams/<active_team>/processes/<process_name>/\n(active_team resolved during initialization)
+
+== UPDATE Operation Execution ==
+
+note over Handler : UPDATE workflow:\n1. Check for target.jsonnet (determines mode)\n2. Find existing artifact\n3. Determine sections to update\n4. Loop through sections atomically\n5. Save updated artifact
+
+Handler -> Workspace : get_artifact_target_section("update-artifact")
+activate Workspace
+alt target.jsonnet exists (multi-section)
+    Workspace -> FS : read_text(/processes/update-artifact/artifact/target.jsonnet)
+    FS --> Workspace : Target with import
+    Workspace -> Workspace : Resolve import to artifact-sections://get-artifact
+    Workspace --> Handler : Consolidated section markers
+    note over Handler : Multi-section mode:\nTargeted section updates
+else target.jsonnet missing (single-section)
+    Workspace --> Handler : FileNotFoundError
+    note over Handler : Single-section mode:\nWhole document replacement
+end
+deactivate Workspace
+
+Handler -> Artifact : find_artifact("update-artifact", artifact_id)
+activate Artifact
+note over Artifact : Singleton mode detection:\nSee update-process-singleton-mode.puml\nfor internal mode detection details
+Artifact --> Handler : Existing artifact path (or None)
+deactivate Artifact
+
+alt artifact_path is None
+    Handler --> Handler : Return error:\n"Artifact not found"
+end
+
+Handler -> Handler : Parse target.jsonnet to get\nconsolidated section mappings
+
+Handler -> Handler : Determine sections to update
+note right of Handler : From compiled schema:\n- section_order (default sections)\n- pantheon_sections (requested)\n- Default to all if none specified
+
+Handler -> Workspace : read_artifact_file(artifact_path)
+activate Workspace
+Workspace -> FS : read_text(artifact_path)
+FS --> Workspace : Current artifact content
+Workspace --> Handler : Current artifact content
+deactivate Workspace
+
+note over Handler : Loop through sections atomically
+
+loop for each section in sections_to_update
+    Handler -> Handler : Get section markers from target_sections
+
+    Handler -> Artifact : _create_template_context(input_params, framework_params, "UPDATE")
+    activate Artifact
+    note over Artifact : Create enhanced context with:\n- section-specific context\n- pantheon_sections = [current_section]\n- section_order from schema\n- built-in variables
+    Artifact --> Handler : Section-specific template context
+    deactivate Artifact
+
+    Handler -> Handler : Extract and flatten section-specific data
+    note right of Handler : Extract section_updates[section_name]\nand merge into context for direct\nvariable access
+
+    Handler -> Workspace : get_artifact_template_environment(process_name)
+    activate Workspace
+    note over Workspace : Create Jinja2 environment with\nFileSystemLoader for include support
+    Workspace --> Handler : Jinja environment with loader
+    deactivate Workspace
+
+    Handler -> Artifact : render_artifact_template(patch_template, context, jinja_env, template_name)
+    activate Artifact
+    note over Artifact : Render consolidated patch.md\nwith section includes
+    Artifact --> Handler : Rendered section patch content
+    deactivate Artifact
+
+    Handler -> Handler : _replace_section_content(\ncurrent_content, start_marker, end_marker, patch_content, insert_mode)
+    note right : Replace/insert content between markers:\n- Default: Replace entire section\n- append: Add at end, preserve existing\n- prepend: Add at start, preserve existing
+
+    Handler -> Handler : Update current_content with section changes
+end
+
+== Save Phase ==
+
+Handler -> Workspace : save_artifact(updated_content, artifact_path)
+activate Workspace
+
+Workspace -> Workspace : Unwrap PantheonPath\n(only Workspace can do this)
+
+Workspace -> Workspace : Resolve absolute path:\n<Project Root>/<artifacts_root>/<relative_path>
+
+Workspace -> FS : write_text(absolute_path, updated_content)
+FS --> Workspace : Write confirmation
+
+Workspace --> Handler : Final absolute path
+deactivate Workspace
+
+Handler -> Workspace : summarize_created_files([saved_path])
+activate Workspace
+Workspace --> Handler : files_info (path, type, description)
+deactivate Workspace
+
+Handler --> Handler : Generate standardized success message:\n"<process_name> completed successfully. All verifications complete. Operation: UPDATE."
+
+note right of Handler
+Consolidated UPDATE Process:
+* Single update-<artifact> process handles multiple sections
+* Uses consolidated schema with section_updates and section_order
+* Supports --sections parameter for selective updates
+* Supports --insert-mode parameter (append/prepend)
+* Atomic section processing with rollback on failure
+* Template composition via Jinja2 includes
+* Import-based asset sharing (locator, parser, target from GET)
+
+Singleton Mode:
+* parser.jsonnet presence determines mode
+* See update-process-singleton-mode.puml for details
+
+Related Diagrams:
+* update-process-singleton-mode.puml: Mode detection internals
+* get-process-core.puml: Shows GET singleton mode (UPDATE matches this)
+* build-process-scaffold-update.puml: Consolidated process scaffolding
+* ../03-core-flows/operation-detection.puml: UPDATE type detection
+* ../01-architecture/container-view.puml: Architectural patterns
+end note
+
+@enduml
