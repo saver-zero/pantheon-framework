@@ -129,8 +129,8 @@ Below are some demo projects with Pantheon Framework in action. The trip plannin
 
 ### Demo 1 - Pantheon Dev Team
 What it looks like to create an LLM backed trip planner using different `Pantheon Dev` team profiles.
-* [Vibe Coding Profile](https://github.com/saver-zero/pantheon-framework-demo/pantheon-vibe-coding) - The minimal profile to support the Glass Box Process with auto-commit and progress logs.
-* [Check-Everything Profile](https://github.com/saver-zero/pantheon-framework-demo/pantheon-check-everything) - The most comprehensive profile with Test-Driven-Development, code review, up-to-date documentation and diagrams. For this specific demo, [OpenCode](https://github.com/sst/opencode) was used mid-project with `Qwen3 Coder 480B A35B` model from NVIDIA, demonstrating the ability to switch providers mid-project.
+* [Vibe Coding Profile](https://github.com/saver-zero/pantheon-framework-demo/tree/main/pantheon-vibe-coding) - The minimal profile to support the Glass Box Process with auto-commit and progress logs.
+* [Check-Everything Profile](https://github.com/saver-zero/pantheon-framework-demo/tree/main/pantheon-check-everything) - The most comprehensive profile with Test-Driven-Development, code review, up-to-date documentation and diagrams. For this specific demo, [OpenCode](https://github.com/sst/opencode) was used mid-project with `Qwen3 Coder 480B A35B` model from NVIDIA, demonstrating the ability to switch providers mid-project.
 
 ### Demo 2 - Custom Software Development Workflow
 
@@ -149,9 +149,9 @@ Here's what creating the teams looked like:
 @pantheon-team-builder Create a team based on @production-ready-workflow.md
 ```
 
-* [ASCII Planning](https://github.com/saver-zero/pantheon-framework-demo/ascii-planning) - Uses ASCII wireframes for planning.
-* [Dead Simple Workflow](https://github.com/saver-zero/pantheon-framework-demo/dead-simple-workflow) - Keeps the project context updated with bite-size implementation TODOs.
-* [Production Ready Workflow](https://github.com/saver-zero/pantheon-framework-demo/production-ready-workflow) - Creates a single source of truth PRD to work off of, with a review process to evaluate the implementation against the original PRD.
+* [ASCII Planning](https://github.com/saver-zero/pantheon-framework-demo/tree/main/ascii-planning) - Uses ASCII wireframes for planning.
+* [Dead Simple Workflow](https://github.com/saver-zero/pantheon-framework-demo/tree/main/dead-simple-workflow) - Keeps the project context updated with bite-size implementation TODOs.
+* [Production Ready Workflow](https://github.com/saver-zero/pantheon-framework-demo/tree/main/production-ready-workflow) - Creates a single source of truth PRD to work off of, with a review process to evaluate the implementation against the original PRD.
 
 ### Demo 3 - Creating New Teams
 
@@ -159,7 +159,7 @@ Here's what creating the teams looked like:
 
 This demo shows what it's like to create and use a non-development team - a simple trip planning team. It used the [transcript](travel-idea.txt) from OpenAI's recent [demo of Agent Builder](https://www.youtube.com/watch?v=44eFf-tRiSg) to create the `Travel Itinerary` team.
 
-[Travel Itinerary](https://github.com/saver-zero/pantheon-framework-demo/travel-itinerary) - What it looks like to create a non-development team that generates travel itinerary and flight options.
+[Travel Itinerary](https://github.com/saver-zero/pantheon-framework-demo/tree/main/travel-itinerary) - What it looks like to create a non-development team that generates travel itinerary and flight options.
 ```
 @travel-idea.txt is a transcript from a demo that sets up an agent for creating travel itinerary.
 Let's build upon the idea. Let's create a team that does a bit more helpful things. Let's create a team that creates a
@@ -174,7 +174,7 @@ that it's easy to use
 
 This demo shows what it's like to create and use a non-development team - a simple `Receipt Analysis` team. The team will take a look at the set of receipts given and do an analysis. The project is started with just a vague idea of having a receipt analyzer team, showing how to go from a rough idea -> team creation -> usage of the team, with some minor modifications in between.
 
-[Receipt Analysis](https://github.com/saver-zero/pantheon-framework-demo/receipt-analysis) - What it looks like to create a non-development team that analyzes receipts and provides spending insights.
+[Receipt Analysis](https://github.com/saver-zero/pantheon-framework-demo/tree/main/receipt-analysis) - What it looks like to create a non-development team that analyzes receipts and provides spending insights.
 ```
 > I am thinking of creating a receipt-analyzer team. I'll give it a set of receipt images and ask it to analyze it - grocery
 receipts, amazon receipts, things of that nature where you don't really get visibility into your spending just from a credit
