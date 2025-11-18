@@ -55,7 +55,7 @@ Based on the context and relevant documentation provided, create the architectur
 
 Kickoff Ticket ID: {{ pantheon_artifact_id }}
 
-Draft a commit message, without commiting or staging any files. Use `pantheon get process update-kickoff-ticket --sections commit_message --insert-mode prepend --actor <your_agent_name>`. This ensures the commit message will be drafted without files being committed or staged. <your_agent_name> is your authentic identity executing this work. Do not simply use the ticket's "Assigned to" field unless you ARE that agent. Examples: claude-code, codex, gemini, or <agent-role-name> (i.e backend-engineer, only if explicitly instantiated as that agent).
+Draft a commit message, without commiting or staging any files. Use `pantheon get process update-kickoff-ticket --sections commit_message --actor <your_agent_name>`. This ensures the commit message will be drafted without files being committed or staged. <your_agent_name> is your authentic identity executing this work. Do not simply use the ticket's "Assigned to" field unless you ARE that agent. Examples: claude-code, codex, gemini, or <agent-role-name> (i.e backend-engineer, only if explicitly instantiated as that agent).
 
   *Requirements:*
   - Commit messge is drafted using the Pantheon tool, without commiting or staging any files.
@@ -68,7 +68,7 @@ Draft a commit message, without commiting or staging any files. Use `pantheon ge
 
 Kickoff Ticket ID: {{ pantheon_artifact_id }}
 
-Submit a progress log. Use `pantheon get process update-kickoff-ticket --sections progress_log --insert-mode prepend --actor <your_agent_name>`. <your_agent_name> is your authentic identity executing this work. Do not simply use the ticket's "Assigned to" field unless you ARE that agent. Examples: claude-code, codex, gemini, or <agent-role-name> (i.e backend-engineer, only if explicitly instantiated as that agent).
+Submit a progress log. Use `pantheon get process update-kickoff-ticket --sections progress_log --actor <your_agent_name>`. <your_agent_name> is your authentic identity executing this work. Do not simply use the ticket's "Assigned to" field unless you ARE that agent. Examples: claude-code, codex, gemini, or <agent-role-name> (i.e backend-engineer, only if explicitly instantiated as that agent).
 
   *Requirements:*
   - Progress log is submitted.

@@ -208,7 +208,7 @@ source .venv/bin/activate
 Install Pantheon from the latest release
 
 ```bash
-pip install pantheon-framework-0.1.0.whl
+pip install pantheon_framework-0.1.1-py3-none-any.whl
 
 # Verify installation
 pantheon --help
