@@ -182,3 +182,88 @@ To make content retrieval-friendly, write metadata with search in mind.
 - **Example Queries:** An agent can combine metadata for precise retrieval:
   - `search(keywords: "sequence" AND "database")` -> Finds all sequence diagrams for the database.
   - `search(status: "deprecated" AND owner: "data-team")` -> Finds all outdated docs owned by the data team.
+
+## 9. Documentation Effort Scaling
+
+Documentation effort should be proportional to change complexity. Not all changes warrant the same level of documentation.
+
+### 9.1. Change Classification Matrix
+
+| Classification | Criteria | Documentation Requirement |
+|---------------|----------|---------------------------|
+| **Trivial** | Mechanical changes with no design decisions (formatting, renaming, type annotations, lint fixes) | **Skip** - No documentation update needed |
+| **Simple** | Isolated changes following established patterns (bug fixes, small features, config changes) | **Lightweight** - 1-2 sentence summary in commit message or existing doc |
+| **Complex** | New patterns, architectural decisions, or changes affecting multiple components | **Full** - Comprehensive documentation with examples and rationale |
+
+### 9.2. Skip Documentation When
+
+- Changes are purely mechanical (no *why* to document)
+- The code change is self-documenting (type annotations, formatting)
+- Changes follow an existing documented pattern without deviation
+- No new concepts, patterns, or decisions were introduced
+
+**Example - Skip:**
+```
+Adding `dict[str, Any]` type annotations to 20 functions.
+Why skip: Mechanical change, no design decisions, pattern is self-evident.
+```
+
+### 9.3. Lightweight Documentation When
+
+- Changes fix a specific bug or add a minor feature
+- Implementation follows established patterns
+- One or two sentences capture the essential *why*
+
+**Format:** Add to existing documentation or commit message:
+```
+"Added None checks before date comparisons to satisfy mypy type narrowing requirements."
+```
+
+### 9.4. Full Documentation When
+
+- New architectural patterns are introduced
+- Multiple design decisions were made with trade-offs
+- Changes establish precedent for future work
+- Complex algorithms or non-obvious logic is introduced
+
+**Format:** Create or update dedicated documentation section with:
+- Problem context
+- Design decisions and rationale
+- Code examples
+- Best practices extracted
+
+### 9.5. Diagram Update Scaling
+
+Apply the same classification matrix to diagram updates:
+
+| Classification | Diagram Requirement |
+|---------------|---------------------|
+| **Trivial** | Skip - No diagram changes |
+| **Simple** | Skip unless visual architecture changed |
+| **Complex** | Update affected diagrams with annotations |
+
+### 9.6. Decision Checklist
+
+Before creating documentation, answer:
+
+1. **Did I make any design decisions?** If no -> Skip or Lightweight
+2. **Would another developer need to understand *why* I did this?** If no -> Skip
+3. **Does this establish a new pattern?** If no -> Lightweight at most
+4. **Is the code change self-documenting?** If yes -> Skip
+
+### 9.7. Anti-Pattern: Documentation as Ceremony
+
+**Avoid:** Creating documentation purely because a process requires it.
+
+**Bad Example:**
+```markdown
+## Type Annotation Patterns
+Added type annotations to 5 service files to resolve mypy errors.
+- decorators.py: Added cast() operations
+- pricing_service.py: Added dict type annotation
+[... 200 more lines describing mechanical changes ...]
+```
+
+**Why it's bad:** This documents *what* was done (visible in the code) not *why*. The time spent writing this documentation provides no value to future developers.
+
+**Good Example:** Skip documentation entirely for mechanical changes. If a pattern emerged that's worth capturing, document the pattern once, not each instance of applying it.
