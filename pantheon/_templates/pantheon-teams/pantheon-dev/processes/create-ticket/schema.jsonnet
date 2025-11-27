@@ -10,6 +10,11 @@ local sections = [
     enabled: false
   },
   {
+    name: "ui_spec",
+    schema: import "process-schema://update-ticket/sections/ui_spec",
+    enabled: false
+  },
+  {
     name: "technical_plan",
     schema: import "process-schema://update-ticket/sections/technical_plan",
     enabled: false

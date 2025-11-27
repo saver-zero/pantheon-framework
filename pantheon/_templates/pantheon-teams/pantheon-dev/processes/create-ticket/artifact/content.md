@@ -21,6 +21,15 @@ created_at: {{ pantheon_timestamp }}
 <!-- SECTION:END:BASELINE_COMMIT -->
 {% endif %}
 
+{% set _include_ui_spec = false %}
+<!-- SECTION:START:UI_SPEC -->
+{% if _include_ui_spec %}
+{% include 'artifact-template://update-ticket/sections/ui_spec' %}
+{% else %}
+<!-- SECTION:PLACEHOLDER -->
+{% endif %}
+<!-- SECTION:END:UI_SPEC -->
+
 {% set _include_technical_plan = false %}
 <!-- SECTION:START:TECHNICAL_PLAN -->
 {% if _include_technical_plan %}

@@ -17,6 +17,12 @@
       ],
       "deny": []
     },
+    "ui_spec": {
+      "allow": [
+        "*"
+      ],
+      "deny": []
+    },
     "technical_plan": {
       "allow": [
         "*"
