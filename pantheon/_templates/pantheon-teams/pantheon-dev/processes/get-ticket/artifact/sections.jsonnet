@@ -5,6 +5,11 @@
       "start": "<!-- SECTION:START:TICKET_DESCRIPTION -->",
       "end": "<!-- SECTION:END:TICKET_DESCRIPTION -->"
     },
+    "ui_spec": {
+      "description": "UI specification with wireframes, layout notes, navigation flow, and state transitions",
+      "start": "<!-- SECTION:START:UI_SPEC -->",
+      "end": "<!-- SECTION:END:UI_SPEC -->"
+    },
     "technical_plan": {
       "description": "Detailed technical implementation plan with phases and steps",
       "start": "<!-- SECTION:START:TECHNICAL_PLAN -->",

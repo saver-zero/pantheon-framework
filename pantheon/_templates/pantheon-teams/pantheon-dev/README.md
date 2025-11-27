@@ -304,6 +304,26 @@ Example:
 
 Once you have your architecture guide and initial backlog, you're ready for development. Here's the typical development workflow with concrete examples:
 
+**Step 0 (Optional): Create a UI Spec**
+
+For tickets involving user interface work, create a UI spec before the technical plan. UI specs use ASCII wireframes to communicate layout and interaction design in a token-efficient format that serves as the single source of truth for visual implementation.
+
+Example:
+
+```
+@frontend-engineer, create a UI spec for ticket T012.
+```
+
+The specialist will create ASCII wireframes showing component layout, document navigation flows between screens, and capture design decisions with rationale. This visual foundation makes the subsequent technical plan more precise and reduces implementation ambiguity.
+
+When to use UI specs:
+- New screens or views being added
+- Significant layout changes to existing UI
+- Complex interaction patterns or state transitions
+- When multiple team members need shared understanding of visual design
+
+Skip this step for backend-only tickets, API work, or minor UI tweaks where the design is obvious.
+
 **Step 1: Create Technical Plan**
 
 Pick a ticket from the backlog and ask the appropriate specialist to create a technical plan.
@@ -314,7 +334,7 @@ Example:
 @frontend-engineer, create a plan for ticket T012.
 ```
 
-The specialist will read the ticket context, reference the architecture guide, and create a detailed technical plan with phases.
+The specialist will read the ticket context (including any UI spec), reference the architecture guide, and create a detailed technical plan with phases.
 
 **Step 2: Review and Refine Plan**
 

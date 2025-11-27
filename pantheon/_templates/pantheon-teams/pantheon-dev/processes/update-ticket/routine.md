@@ -22,7 +22,7 @@ Step {{ _current_step_index.num }}. **Get Schema:** Retrieve the structural cont
 {% set _current_step_index.num = _current_step_index.num + 1 %}
 {% if _get_context_and_reference %}
 
-Step {{ _current_step_index.num }}. **Get Context** Retrieve the context for the ticket. Use `pantheon execute get-ticket --sections context,{{ initial_section }} --actor <your_agent_name> --id <ticket id>`
+Step {{ _current_step_index.num }}. **Get Context** Retrieve the context for the ticket. Use `pantheon execute get-ticket --sections context,{{ initial_section }},ui_spec --actor <your_agent_name> --id <ticket id>`
 {% set _current_step_index.num = _current_step_index.num + 1 %}
 
 Step {{ _current_step_index.num }} (branch). **Analyze References:** Perform a branch condition check. Check if reference material (like a document or diagram) was provided in the context.
